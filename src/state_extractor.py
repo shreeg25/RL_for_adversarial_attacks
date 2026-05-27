@@ -7,7 +7,7 @@ class TrackingStateExtractor:
     def __init__(self):
         self.tracker = DeepSort(
             max_age=30,
-            n_init=3,
+            n_init=1,
             nn_budget=100,
             max_cosine_distance=0.4,
             embedder_gpu=(DEVICE.type == "cuda"),
