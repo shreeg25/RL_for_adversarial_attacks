@@ -1,0 +1,24 @@
+data:
+  seq_path: data/MOT17/train/MOT17-04-FRCNN
+
+reward:
+  w1: 1.0      # IoU survival reward weight
+  w2: 5.0      # ID switch penalty weight
+  w3: 0.5      # Action cost weight
+
+ppo:
+  total_timesteps: 500000
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01          # keeps policy stochastic — critical for EOT defense
+  net_arch: [64, 64]
+
+paths:
+  model_save: outputs/mtd_ppo_agent
+  tb_logs: outputs/tb_logs
+  debug_csv: outputs/state_debug.csv
