@@ -22,3 +22,10 @@ paths:
   model_save: outputs/mtd_ppo_agent
   tb_logs: outputs/tb_logs
   debug_csv: outputs/state_debug.csv
+
+device:
+  use_gpu: true
+  gpu_id: 0                # change if you have multiple GPUs
+  mixed_precision: true    # fp16 — cuts VRAM usage ~40%, speeds up ~30%
+  num_workers: 4           # DataLoader workers for frame prefetching
+  pin_memory: true         # faster CPU→GPU transfers
