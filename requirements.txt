@@ -8,3 +8,4 @@ stable-baselines3>=2.0
 deep-sort-realtime
 pyyaml
 tensorboard
+tdqm
