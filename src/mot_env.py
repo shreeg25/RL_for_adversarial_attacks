@@ -175,18 +175,28 @@ class MOT17Env(gym.Env):
             self._prefetcher.stop()
 
     def _run_frame(self, action: int):
-        # Pull next pre-fetched GPU tensor
         tensor = self._prefetcher.get()
         if tensor is None:
-            # Sequence ended during prefetch — return zeros
             return np.zeros(3, dtype=np.float32), []
 
         self._current_tensor = tensor
-
-        # Apply transformation (GPU-accelerated)
         frame_rgb = gpu_apply_transformation(tensor, action)
 
         frame_no = self._frame_idx + 1
         xywh, confs = self._det_map.get(frame_no, ([], []))
+
+        # ─── DIAGNOSTIC HEARTBEAT ──────────────────────────────────────────
+        if self._frame_idx < 3:
+            print(f"\n[DIAGNOSTIC] Frame {frame_no}")
+            print(f"  -> Detections from det.txt : {len(xywh)}")
+            if len(xywh) > 0:
+                print(f"  -> Sample Bounding Box     : {xywh[0]}")
+                print(f"  -> Sample Raw Confidence   : {confs[0]}")
+            
+            if self._extractor:
+                active = [t for t in self._extractor.tracker.tracker.tracks if t.is_confirmed()]
+                print(f"  -> Confirmed DeepSORT Tracks: {len(active)}")
+        # ───────────────────────────────────────────────────────────────────
+
         state, active_ids = self._extractor.update(frame_rgb, xywh, confs)
         return state, active_ids
