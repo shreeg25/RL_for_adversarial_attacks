@@ -29,7 +29,8 @@ class TrackingStateExtractor:
         
         # FIX: deep_sort_realtime expects [ [ [x,y,w,h], confidence, class_id ], ... ]
         # Using "0" instead of None prevents internal tracking crashes on some pip versions
-        raw = [[d, c, "0"] for d, c in zip(detections_xywh, confidences)]
+        # FIX: Force conf to 1.0 to bypass deep_sort_realtime's silent dropping of raw logits
+        raw = [[d, 1.0, "0"] for d in detections_xywh]
         
         tracks = self.tracker.update_tracks(raw, frame=frame_rgb)
 
