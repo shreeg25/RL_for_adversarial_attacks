@@ -7,7 +7,7 @@ class TrackingStateExtractor:
     def __init__(self):
         self.tracker = DeepSort(
             max_age=30,
-            n_init=1,
+            n_init=3,
             nn_budget=100,
             max_cosine_distance=0.4,
             embedder_gpu=(DEVICE.type == "cuda"),
@@ -27,11 +27,23 @@ class TrackingStateExtractor:
         confidences: list,
     ) -> tuple[np.ndarray, list[str]]:
         
-        # FIX: deep_sort_realtime expects [ [ [x,y,w,h], confidence, class_id ], ... ]
-        # Using "0" instead of None prevents internal tracking crashes on some pip versions
-        # FIX: Force conf to 1.0 to bypass deep_sort_realtime's silent dropping of raw logits
-        raw = [[d, 1.0, "0"] for d in detections_xywh]
+        import math
+        def sigmoid(x):
+            x = max(-10.0, min(10.0, float(x)))
+            return 1.0 / (1.0 + math.exp(-max(-10.0, min(10.0, float(x)))))
         
+        raw = [[d, sigmoid(c), "0"] for d, c in zip(detections_xywh, confidences)]
+
+        def bbox_iou(b1, b2):
+            x1, y1 = max(b1[0], b2[0]), max(b1[1], b2[1])
+            x2 = min(b1[0]+b1[2], b2[0]+b2[2])
+            y2 = min(b1[1]+b1[3], b2[1]+b2[3])
+            inter = max(0, x2-x1) * max(0, y2-y1)
+            union = b1[2]*b1[3] + b2[2]*b2[3] - inter
+            return inter / union if union > 0 else 0.0
+
+        # Pass raw detections to the tracker
+        raw = [[d, sigmoid(c), "0"] for d, c in zip(detections_xywh, confidences)]
         tracks = self.tracker.update_tracks(raw, frame=frame_rgb)
 
         conf_vels, spatial_jumps, feat_dists = [], [], []
@@ -40,16 +52,24 @@ class TrackingStateExtractor:
             if not t.is_confirmed():
                 continue
             
-            tid = t.track_id # Note: deep_sort_realtime uses strings for IDs
+            tid = t.track_id 
 
-            # 1. Confidence Velocity (Negative values = Attack / Bounding box fading)
-            cur_conf = float(t.det_conf) if t.det_conf is not None else 1.0
+            # 1. MANUAL CONFIDENCE EXTRACTION (Bypassing the library cache)
+            tlwh = t.to_tlwh()
+            cur_conf = 0.0 # Default to 0 if the track is coasting (lost)
+            best_iou = 0.0
+            
+            for idx, det_xywh in enumerate(detections_xywh):
+                iou = bbox_iou(tlwh, det_xywh)
+                if iou > best_iou:
+                    best_iou = iou
+                    cur_conf = sigmoid(confidences[idx])
+            
             if tid in self._prev_conf:
                 conf_vels.append(cur_conf - self._prev_conf[tid])
             self._prev_conf[tid] = cur_conf
 
-            # 2. Spatial Jump (Detecting bounding box snapping/detachment)
-            tlwh = t.to_tlwh()
+            # 2. Spatial Jump 
             obs_cx = float(tlwh[0] + tlwh[2] / 2)
             obs_cy = float(tlwh[1] + tlwh[3] / 2)
             
@@ -59,19 +79,17 @@ class TrackingStateExtractor:
                 spatial_jumps.append(jump)
             self._prev_cxcy[tid] = (obs_cx, obs_cy)
 
-            # 3. Feature Cosine Distance (Visual corruption)
+            # 3. Feature Cosine Distance 
             if t.features and len(t.features) >= 2:
                 e1 = np.array(t.features[-2], dtype=np.float32)
                 e2 = np.array(t.features[-1], dtype=np.float32)
                 denom = np.linalg.norm(e1) * np.linalg.norm(e2) + 1e-8
                 feat_dists.append(float(1.0 - np.dot(e1, e2) / denom))
 
-        # 4. AGGREGATION: Isolate the worst-case anomaly.
-        # We want the defense to trigger if ANY track in the frame is under attack.
         state = np.array([
-            np.min(conf_vels)     if conf_vels     else 0.0, # Min because severe drops are negative
-            np.max(spatial_jumps) if spatial_jumps else 0.0, # Max because large jumps are bad
-            np.max(feat_dists)    if feat_dists    else 0.0, # Max because high distance means visual corruption
+            np.min(conf_vels)     if conf_vels     else 0.0, 
+            np.max(spatial_jumps) if spatial_jumps else 0.0, 
+            np.max(feat_dists)    if feat_dists    else 0.0, 
         ], dtype=np.float32)
 
         active_ids = [t.track_id for t in tracks if t.is_confirmed()]
