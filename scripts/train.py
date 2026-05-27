@@ -6,7 +6,7 @@ import torch
 import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import (
     CheckpointCallback, EvalCallback
 )
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     vec_env = make_vec_env(
         make_env,
         n_envs=n_envs,
-        vec_env_cls=SubprocVecEnv,
+        vec_env_cls=DummyVecEnv,
     )
 
     eval_env = make_vec_env(make_env, n_envs=1)
