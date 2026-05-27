@@ -9,3 +9,4 @@ deep-sort-realtime
 pyyaml
 tensorboard
 tdqm
+matplotlib
