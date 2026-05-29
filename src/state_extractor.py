@@ -69,6 +69,7 @@ class TrackingStateExtractor:
                 conf_vels.append(cur_conf - self._prev_conf[tid])
             self._prev_conf[tid] = cur_conf
 
+ 
             # 2. Spatial Jump 
             obs_cx = float(tlwh[0] + tlwh[2] / 2)
             obs_cy = float(tlwh[1] + tlwh[3] / 2)
