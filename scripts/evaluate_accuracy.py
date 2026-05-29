@@ -81,12 +81,13 @@ def match_detections(gt_boxes: list, pred_boxes: list, iou_thresh=0.5):
 
 # ─── Main evaluation loop ─────────────────────────────────────────────────────
 
-def evaluate(deterministic=False):
+def evaluate(model_path, deterministic=False):
     cfg = yaml.safe_load(open("config.yaml"))
     seq_path = cfg["data"]["seq_path"]
 
     env   = MOT17Env(seq_path)
-    model = PPO.load(cfg["paths"]["model_save"])
+    print(f"[eval] Loading TRACE defense from: {model_path}")
+    model = PPO.load(model_path)
     gt    = load_ground_truth(seq_path)
 
     obs, _ = env.reset()
@@ -264,9 +265,14 @@ if __name__ == "__main__":
                         help="Use argmax policy instead of stochastic sampling")
     parser.add_argument("--baseline", action="store_true",
                         help="Also run T0-only baseline for comparison")
+    parser.add_argument("--model", type=str, required=False, help="Path to specific PPO checkpoint")
     args = parser.parse_args()
 
-    agent_metrics = evaluate(deterministic=args.deterministic)
+    # Fallback to config path if no flag is provided
+    cfg = yaml.safe_load(open("config.yaml"))
+    target_model = args.model if args.model else cfg["paths"]["model_save"]
+
+    agent_metrics = evaluate(model_path=target_model, deterministic=args.deterministic)
 
     if args.baseline:
         base_metrics = evaluate_baseline()
