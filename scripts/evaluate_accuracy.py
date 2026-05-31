@@ -260,6 +260,8 @@ def evaluate_baseline():
 
 if __name__ == "__main__":
     import argparse
+    import os
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--deterministic", action="store_true",
                         help="Use argmax policy instead of stochastic sampling")
@@ -274,12 +276,49 @@ if __name__ == "__main__":
 
     agent_metrics = evaluate(model_path=target_model, deterministic=args.deterministic)
 
+    # Initialize text report list
+    report_lines = []
+    report_lines.append("═"*52)
+    report_lines.append("  MTD-PPO Evaluation Summary")
+    report_lines.append("═"*52)
+    report_lines.append(f"  MOTA        :  {agent_metrics['MOTA']*100:6.2f}%")
+    report_lines.append(f"  MOTP        :  {agent_metrics['MOTP']*100:6.2f}%")
+    report_lines.append(f"  IDF1        :  {agent_metrics['IDF1']*100:6.2f}%")
+    report_lines.append(f"  Precision   :  {agent_metrics['Precision']*100:6.2f}%")
+    report_lines.append(f"  Recall      :  {agent_metrics['Recall']*100:6.2f}%")
+    report_lines.append(f"  ID Switches :  {agent_metrics['ID_switches']}")
+
     if args.baseline:
         base_metrics = evaluate_baseline()
+        
+        report_lines.append("\n" + "─"*52)
+        report_lines.append("  Baseline (T0 only — no defense)")
+        report_lines.append("─"*52)
+        report_lines.append(f"  MOTA        :  {base_metrics['MOTA']*100:6.2f}%")
+        report_lines.append(f"  MOTP        :  {base_metrics['MOTP']*100:6.2f}%")
+        report_lines.append(f"  IDF1        :  {base_metrics['IDF1']*100:6.2f}%")
+        report_lines.append(f"  ID Switches :  {base_metrics['ID_switches']}")
+
         print("\n  Delta (agent − baseline):")
+        report_lines.append("\n  Delta (agent − baseline):")
         for k in ["MOTA", "MOTP", "IDF1"]:
             delta = (agent_metrics[k] - base_metrics[k]) * 100
             sign = "+" if delta >= 0 else ""
             print(f"    {k:10s}: {sign}{delta:.2f}%")
+            report_lines.append(f"    {k:10s}: {sign}{delta:.2f}%")
+            
         sw_delta = agent_metrics["ID_switches"] - base_metrics["ID_switches"]
         print(f"    ID_switches: {sw_delta:+d}")
+        report_lines.append(f"    ID_switches: {sw_delta:+d}")
+
+    # Write report to file
+    out_dir = os.path.dirname(target_model) if target_model else "."
+    if not out_dir: 
+        out_dir = "."
+    os.makedirs(out_dir, exist_ok=True)
+    
+    txt_path = os.path.join(out_dir, "evaluation_summary.txt")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(report_lines) + "\n")
+        
+    print(f"\n[eval] Overall evaluation summary saved → {txt_path}")
