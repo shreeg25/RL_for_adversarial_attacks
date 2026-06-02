@@ -1,5 +1,8 @@
 data:
-  seq_path: data/MOT17/train/MOT17-04-FRCNN
+  seq_path: data/MOT17/train/MOT17-04-FRCNN     # primary
+  extra_sequences:                               # add this block
+    - data/MOT17/train/MOT17-02-FRCNN
+    - data/MOT17/train/MOT17-09-FRCNN
 
 reward:
   w1: 1.0      # IoU survival reward weight
