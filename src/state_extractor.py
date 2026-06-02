@@ -10,7 +10,7 @@ class TrackingStateExtractor:
             n_init=3,
             nn_budget=100,
             max_cosine_distance=0.4,
-            embedder_gpu=(DEVICE.type == "cuda"),
+            embedder_gpu=False,
         )
         self._prev_conf:  dict[str, float] = {}
         self._prev_cxcy:  dict[str, tuple] = {}
