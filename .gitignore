@@ -1,4 +1,7 @@
-/venv
-/data
+# Ignore dataset binaries and local outputs
+data/
+venv/
+.pytest_cache/
+__pycache__/
+*.csv
 TRACE_Architecture_Overview.docx
-outputs/eval_per_frame.csv
