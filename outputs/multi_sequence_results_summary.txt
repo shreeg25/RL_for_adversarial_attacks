@@ -1,0 +1,2 @@
+Metric & MOTA & MOTP & IDF1 & Precision & Recall & ID_sw \\
+MTD-PPO & 52.1$\pm$23.4 & 87.0$\pm$1.7 & 76.4$\pm$9.7 & 78.6$\pm$15.1 & 75.3$\pm$8.4 & 54.0$\pm$31.8 \\
