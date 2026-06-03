@@ -1,4 +1,3 @@
-# Ignore dataset binaries and local outputs
 data/
 venv/
 .pytest_cache/
