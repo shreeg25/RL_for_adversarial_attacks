@@ -3,7 +3,6 @@ data/
 venv/
 .pytest_cache/
 __pycache__/
-outputs/*.csv
 TRACE_Architecture_Overview.docx
 architecture.png
 architecturev2.png
