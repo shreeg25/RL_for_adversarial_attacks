@@ -29,8 +29,8 @@ def apply_transformation(frame: np.ndarray, action: int) -> np.ndarray:
         # Jitter the four corners by up to ±15px
         src = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
         jitter = np.random.uniform(-15, 15, src.shape).astype(np.float32)
-        dst = np.clip(src + jitter, 0,
-                      [w, h, w, h]).astype(np.float32)
+        # Fix the broadcasting boundary to match the (4, 2) shape of [x, y] coordinates
+        dst = np.clip(src + jitter, 0, [w, h]).astype(np.float32)
         M = cv2.getPerspectiveTransform(src, dst)
         return cv2.warpPerspective(frame, M, (w, h),
                                    flags=cv2.INTER_LINEAR,
