@@ -235,9 +235,24 @@ def optimize_patch(
                 # ── Inject into frame ─────────────────────────────────
                 poisoned = frame.clone()
                 region   = poisoned[:, :, y1:y2, x1:x2]
-                poisoned[:, :, y1:y2, x1:x2] = torch.clamp(
-                    region + phys_patch, 0.0, 1.0
-                )
+                
+                # Force region into PyTorch layout (B, C, H, W) if it's currently (B, H, W, C)
+                if region.shape[-1] == 3:
+                    region = region.permute(0, 3, 1, 2)
+                    
+                # Ensure phys_patch matches the exact height/width of the region
+                if phys_patch.shape[-2:] != region.shape[-2:]:
+                    phys_patch = F.interpolate(phys_patch, size=(region.shape[2], region.shape[3]), 
+                                               mode="bilinear", align_corners=False)
+
+                # Safe injection
+                injected_region = torch.clamp(region + phys_patch, 0.0, 1.0)
+                
+                # If poisoned was originally (B, H, W, C), permute the injected region back before placing it
+                if poisoned.shape[-1] == 3:
+                    injected_region = injected_region.permute(0, 2, 3, 1)
+                    
+                poisoned[:, :, y1:y2, x1:x2] = injected_region
 
                 # ── BPDA forward (real defense, identity backward) ────
                 defended = BPDA.apply(poisoned, action)
@@ -405,12 +420,19 @@ if __name__ == "__main__":
             )
 
             # ── Final physical injection ──────────────────────────────
-            # Apply one final physical rendering at exact bbox size
             poisoned   = frame_t.clone()
             phys_final = renderer.apply(patch, bbox_w=w, bbox_h=h)
-            poisoned[:, :, y1:y1+h, x1:x1+w] = torch.clamp(
-                poisoned[:, :, y1:y1+h, x1:x1+w] + phys_final, 0.0, 1.0
-            )
+            
+            region_final = poisoned[:, :, y1:y1+h, x1:x1+w]
+            if region_final.shape[-1] == 3:
+                region_final = region_final.permute(0, 3, 1, 2)
+                
+            injected_final = torch.clamp(region_final + phys_final, 0.0, 1.0)
+            
+            if poisoned.shape[-1] == 3:
+                injected_final = injected_final.permute(0, 2, 3, 1)
+                
+            poisoned[:, :, y1:y1+h, x1:x1+w] = injected_final
 
             # ── Overwrite the clean copy with poisoned version ─────────
             save_path = os.path.join(out_img_dir, f"{frame_idx:06d}.jpg")
