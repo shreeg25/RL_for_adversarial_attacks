@@ -7,3 +7,4 @@ architecture.png
 architecturev2.png
 sync_changes.bundle
 outputs/eval_per_frame.csv
+outputs/eval_per_frame_clean.csv
