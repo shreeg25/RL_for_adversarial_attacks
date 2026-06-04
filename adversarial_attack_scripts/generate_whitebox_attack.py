@@ -359,8 +359,11 @@ if __name__ == "__main__":
                 break
 
             # Prefetcher returns (C,H,W) — add batch dim
-            frame_t = tensor.unsqueeze(0).to(device)
-
+            #Convert the NumPy array safely to a torch tensor first
+            if isinstance(tensor, np.ndarray):
+                frame_t = torch.from_numpy(tensor).unsqueeze(0).to(device)
+            else:
+                frame_t = tensor.unsqueeze(0).to(device)
             row = tgt_gt[tgt_gt["frame"] == frame_idx]
             if row.empty:
                 # FIX-4: skip cleanly instead of breaking
