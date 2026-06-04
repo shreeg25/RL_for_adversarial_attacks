@@ -12,24 +12,6 @@ import numpy as np
 import pandas as pd
 from stable_baselines3 import PPO
 
-<<<<<<< HEAD
-sys.path.insert(0, os.path.abspath("."))
-
-from src.mot_env import MOT17Env
-from scripts.evaluate_accuracy import load_ground_truth, match_detections
-
-def evaluate_sequence(seq_path: str, agent, label: str) -> dict:
-    """Evaluates a single sequence while cleanly isolating tracker state memory."""
-    env = MOT17Env(seq_path)
-    gt = load_ground_truth(seq_path)
-    obs, _ = env.reset()
-    
-    # Force absolute tracker memory purge to prevent multi-sequence identity leakage
-    if hasattr(env, "_extractor") and env._extractor is not None:
-        env._extractor.reset()
-
-    # Sequence Accumulators
-=======
 def evaluate_sequence(seq_path: str, agent, label: str) -> dict:
     """Evaluates a single sequence while cleanly isolating tracker state memory."""
     import yaml
@@ -51,7 +33,6 @@ def evaluate_sequence(seq_path: str, agent, label: str) -> dict:
     if hasattr(env, "_extractor") and env._extractor is not None:
         env._extractor.reset()
 
->>>>>>> f7d9a2d00e5750e95f0850b4f95e628c783a4ae5
     s_gt, s_tp, s_fp, s_fn, s_id_sw = 0, 0, 0, 0, 0
     s_iou_sum, s_matched = 0.0, 0
     frame_no = 1
@@ -62,31 +43,13 @@ def evaluate_sequence(seq_path: str, agent, label: str) -> dict:
             action, _ = agent.predict(obs, deterministic=False)
             obs, reward, done, _, info = env.step(int(action))
 
-<<<<<<< HEAD
-        gt_boxes = gt.get(frame_no, [])
-        tracks = [t for t in env._extractor.tracker.tracker.tracks if t.is_confirmed()]
-        pred_boxes = [t.to_tlwh().tolist() for t in tracks]
-=======
             gt_boxes = gt.get(frame_no, [])
             tracks = [t for t in env._extractor.tracker.tracker.tracks if t.is_confirmed()]
             pred_boxes = [t.to_tlwh().tolist() for t in tracks]
->>>>>>> f7d9a2d00e5750e95f0850b4f95e628c783a4ae5
 
             matched_ious, fp, fn = match_detections(gt_boxes, pred_boxes)
             tp = len(matched_ious)
 
-<<<<<<< HEAD
-        s_gt      += len(gt_boxes)
-        s_tp      += tp
-        s_fp      += fp
-        s_fn      += fn
-        s_id_sw   += info["id_switches"]
-        s_iou_sum += sum(matched_ious)
-        s_matched += tp
-        frame_no  += 1
-
-    # Safe sequence evaluation calculations
-=======
             s_gt      += len(gt_boxes)
             s_tp      += tp
             s_fp      += fp
@@ -101,7 +64,6 @@ def evaluate_sequence(seq_path: str, agent, label: str) -> dict:
         # to kill their queues and close down cleanly before switching files
         env.close()
 
->>>>>>> f7d9a2d00e5750e95f0850b4f95e628c783a4ae5
     mota      = 1.0 - (s_fn + s_fp + s_id_sw) / max(s_gt, 1)
     motp      = s_iou_sum / max(s_matched, 1)
     precision = s_tp / max(s_tp + s_fp, 1)
@@ -114,13 +76,8 @@ def evaluate_sequence(seq_path: str, agent, label: str) -> dict:
         "MOTP": round(motp * 100, 2),
         "IDF1": round(idf1 * 100, 2),
         "Precision": round(precision * 100, 2),
-<<<<<<< HEAD
-        "Recall": round(recall * 100, 2),
-        "ID_sw": s_id_sw,
-=======
         "Recall":    round(recall * 100, 2),
         "ID_sw":     s_id_sw,
->>>>>>> f7d9a2d00e5750e95f0850b4f95e628c783a4ae5
         "raw": {"gt": s_gt, "tp": s_tp, "fp": s_fp, "fn": s_fn, "id_sw": s_id_sw, "iou_sum": s_iou_sum, "matched": s_matched}
     }
 
