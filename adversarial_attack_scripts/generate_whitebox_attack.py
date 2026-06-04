@@ -375,15 +375,14 @@ if __name__ == "__main__":
 
             # Prefetcher returns (C,H,W) — add batch dim
             # Convert the NumPy array frame safely to a torch tensor
+            # Convert the NumPy array frame safely to a torch tensor and NORMALIZE
             if isinstance(tensor, np.ndarray):
-                # original shape: (H, W, C) -> unsqueeze(0) makes it (1, H, W, C)
-                # permute(0, 3, 1, 2) reorders it to standard PyTorch batch: (1, C, H, W)
-                frame_t = torch.from_numpy(tensor).unsqueeze(0).permute(0, 3, 1, 2).to(device).float()
+                frame_t = torch.from_numpy(tensor).unsqueeze(0).permute(0, 3, 1, 2).to(device).float() / 255.0
             else:
                 if tensor.ndim == 4 and tensor.shape[-1] == 3:
-                    frame_t = tensor.permute(0, 3, 1, 2).to(device).float()
+                    frame_t = tensor.permute(0, 3, 1, 2).to(device).float() / 255.0
                 else:
-                    frame_t = tensor.to(device).float()
+                    frame_t = tensor.to(device).float() / 255.0
             row = tgt_gt[tgt_gt["frame"] == frame_idx]
             if row.empty:
                 # FIX-4: skip cleanly instead of breaking
