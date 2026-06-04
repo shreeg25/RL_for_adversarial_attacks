@@ -38,10 +38,10 @@ from src.mot_env import FramePrefetcher
 from adversarial_attack_scripts.target_selector import find_optimal_target
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
-N_EOT    = 10     # EOT samples averaged per action per PGD step
+N_EOT    = 3     # EOT samples averaged per action per PGD step
 EPSILON  = 1.0    # Full contrast — physical patch can use any colour
-ALPHA    = 0.05   # PGD step size
-ITERS    = 40     # PGD iterations per frame
+ALPHA    = 0.1   # PGD step size
+ITERS    = 15     # PGD iterations per frame
 # Whitebox: attacker knows ALL 4 defense actions and averages over them
 WHITEBOX_ACTIONS = [0, 1, 2, 3]
 
