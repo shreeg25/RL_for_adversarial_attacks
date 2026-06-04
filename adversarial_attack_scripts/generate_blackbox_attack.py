@@ -38,10 +38,10 @@ from adversarial_attack_scripts.generate_whitebox_attack import (
 )
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
-N_EOT   = 10
+N_EOT   = 3       # Down from 10
 EPSILON = 1.0
-ALPHA   = 0.05
-ITERS   = 40
+ALPHA   = 0.1     # Up from 0.05
+ITERS   = 15      # Down from 40
 
 
 # ── PGD + EOT (no BPDA, no action knowledge) ─────────────────────────────────
@@ -78,10 +78,26 @@ def optimize_patch_blackbox(
             # Physical rendering — same as whitebox, no defense layer after
             phys_patch = renderer.apply(patch_data, bbox_w=w, bbox_h=h)
 
+            # ── Safe Injection ──────────────────────────────────────────
             poisoned = frame.clone()
-            poisoned[:, :, y1:y2, x1:x2] = torch.clamp(
-                poisoned[:, :, y1:y2, x1:x2] + phys_patch, 0.0, 1.0
-            )
+            region = poisoned[:, :, y1:y2, x1:x2]
+            
+            # Force region into PyTorch layout (B, C, H, W)
+            if region.shape[-1] == 3:
+                region = region.permute(0, 3, 1, 2)
+                
+            # Align spatial dimensions
+            if phys_patch.shape[-2:] != region.shape[-2:]:
+                phys_patch = F.interpolate(phys_patch, size=(region.shape[2], region.shape[3]), 
+                                           mode="bilinear", align_corners=False)
+
+            injected_region = torch.clamp(region + phys_patch, 0.0, 1.0)
+            
+            # Permute back if the original frame was in NumPy layout
+            if poisoned.shape[-1] == 3:
+                injected_region = injected_region.permute(0, 2, 3, 1)
+                
+            poisoned[:, :, y1:y2, x1:x2] = injected_region
 
             # ── No BPDA here — raw detector, no defense knowledge ─────
             preds   = model([poisoned[0]])[0]
@@ -184,7 +200,14 @@ if __name__ == "__main__":
             if tensor is None:
                 break
 
-            frame_t = tensor.unsqueeze(0).to(device)
+            # Convert the NumPy array frame safely to a torch tensor and NORMALIZE
+            if isinstance(tensor, np.ndarray):
+                frame_t = torch.from_numpy(tensor).unsqueeze(0).permute(0, 3, 1, 2).to(device).float() / 255.0
+            else:
+                if tensor.ndim == 4 and tensor.shape[-1] == 3:
+                    frame_t = tensor.permute(0, 3, 1, 2).to(device).float() / 255.0
+                else:
+                    frame_t = tensor.to(device).float() / 255.0
 
             row = tgt_gt[tgt_gt["frame"] == frame_idx]
             if row.empty:
@@ -218,11 +241,20 @@ if __name__ == "__main__":
                 n_eot    = N_EOT,
             )
 
+            # ── Final physical injection ──────────────────────────────
             poisoned   = frame_t.clone()
             phys_final = renderer.apply(patch, bbox_w=w, bbox_h=h)
-            poisoned[:, :, y1:y1+h, x1:x1+w] = torch.clamp(
-                poisoned[:, :, y1:y1+h, x1:x1+w] + phys_final, 0.0, 1.0
-            )
+            
+            region_final = poisoned[:, :, y1:y1+h, x1:x1+w]
+            if region_final.shape[-1] == 3:
+                region_final = region_final.permute(0, 3, 1, 2)
+                
+            injected_final = torch.clamp(region_final + phys_final, 0.0, 1.0)
+            
+            if poisoned.shape[-1] == 3:
+                injected_final = injected_final.permute(0, 2, 3, 1)
+                
+            poisoned[:, :, y1:y1+h, x1:x1+w] = injected_final
 
             save_path = os.path.join(out_img_dir, f"{frame_idx:06d}.jpg")
             torchvision.utils.save_image(poisoned[0], save_path)
