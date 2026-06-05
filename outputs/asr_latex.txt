@@ -1,8 +1,11 @@
 % ASR Table — paste into paper
-% Condition & ASR (\%) & ID-sw & Lost/Total \\
-Clean   | No Defense & 100.0\% & 81 & 1050/1050 \\
-Clean   | MTD Agent & 100.0\% & 81 & 1050/1050 \\
-Blackbox | No Defense & 100.0\% & 174 & 1050/1050 \\
-Blackbox | MTD Agent & 100.0\% & 168 & 1050/1050 \\
-Whitebox | No Defense & 100.0\% & 176 & 1050/1050 \\
-Whitebox | MTD Agent & 100.0\% & 170 & 1050/1050 \\
+\hline
+Condition & ASR (\%) & ID-sw & Lost/Total \\
+\hline
+Clean    | No Defense & 0.2\% & 81 & 2/1047 \\
+Clean    | MTD Agent & 0.2\% & 80 & 2/1047 \\
+Blackbox | No Defense & 67.4\% & 174 & 706/1047 \\
+Blackbox | MTD Agent & 67.2\% & 169 & 704/1047 \\
+Whitebox | No Defense & 99.5\% & 176 & 1042/1047 \\
+Whitebox | MTD Agent & 99.5\% & 176 & 1042/1047 \\
+\hline

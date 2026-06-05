@@ -1,7 +1,7 @@
 label,asr_pct,id_switches,lost,target_frames
-Clean   | No Defense,100.0,81,1050,1050
-Clean   | MTD Agent,100.0,81,1050,1050
-Blackbox | No Defense,100.0,174,1050,1050
-Blackbox | MTD Agent,100.0,168,1050,1050
-Whitebox | No Defense,100.0,176,1050,1050
-Whitebox | MTD Agent,100.0,170,1050,1050
+Clean    | No Defense,0.19,81,2,1047
+Clean    | MTD Agent,0.19,80,2,1047
+Blackbox | No Defense,67.43,174,706,1047
+Blackbox | MTD Agent,67.24,169,704,1047
+Whitebox | No Defense,99.52,176,1042,1047
+Whitebox | MTD Agent,99.52,176,1042,1047
