@@ -30,6 +30,7 @@ import os
 # ── VRAM check BEFORE any src.* imports ──────────────────────────────────────
 import torch
 import types
+from tqdm import tqdm
 
 def _resolve_eval_device(force_cpu=False):
     if force_cpu:
@@ -154,44 +155,48 @@ def run_condition(seq_path, agent, label, deterministic=False):
     frame_no            = 1
     done                = False
 
-    previous_target_id = None
+    original_target_id = None
 
     try:
-        while not done:
-            if agent is not None:
-                action, _ = agent.predict(obs, deterministic=deterministic)
-                action = int(action)
-            else:
-                action = 0   # baseline — always T0
-
-            obs, _, done, _, info = env.step(action)
-            total_id_sw += int(info["id_switches"])
-
-            # Check if the target exists in Ground Truth for this frame
-            gt_box = target_boxes.get(frame_no)
-            if gt_box is not None:
-                total_target_frames += 1
-                
-                tracks = [t for t in env._extractor.tracker.tracker.tracks if t.is_confirmed()]
-                
-                active_target_id = None
-                for t in tracks:
-                    trk_box = t.to_tlwh().tolist()
-                    if bbox_iou(gt_box, trk_box) >= 0.5:
-                        active_target_id = t.track_id
-                        break
-                        
-                if active_target_id is None:
-                    # Target is spatially lost
-                    lost_frames += 1
+        with tqdm(total=env._n_frames, desc="    Processing", leave=False, unit="frame") as pbar:
+            while not done:
+                if agent is not None:
+                    action, _ = agent.predict(obs, deterministic=deterministic)
+                    action = int(action)
                 else:
-                    # Target is spatially there, but did the identity break?
-                    if previous_target_id is not None and active_target_id != previous_target_id:
-                        lost_frames += 1  # Attack successfully forced an ID switch
-                    
-                    previous_target_id = active_target_id
+                    action = 0   # baseline — always T0
 
-            frame_no += 1
+                obs, _, done, _, info = env.step(action)
+                total_id_sw += int(info["id_switches"])
+
+                # Check if the target exists in Ground Truth for this frame
+                gt_box = target_boxes.get(frame_no)
+                if gt_box is not None:
+                    total_target_frames += 1
+                    
+                    tracks = [t for t in env._extractor.tracker.tracker.tracks if t.is_confirmed()]
+                    
+                    active_target_id = None
+                    for t in tracks:
+                        trk_box = t.to_tlwh().tolist()
+                        if bbox_iou(gt_box, trk_box) >= 0.5:
+                            active_target_id = t.track_id
+                            break
+                            
+                    if active_target_id is None:
+                        # Target is completely lost spatially
+                        lost_frames += 1
+                    else:
+                        # Target is found. Lock in its ID if we haven't yet.
+                        if original_target_id is None:
+                            original_target_id = active_target_id
+                        
+                        # If the current ID doesn't match the original, the attack broke the identity!
+                        elif active_target_id != original_target_id:
+                            lost_frames += 1
+
+                frame_no += 1
+                pbar.update(1)
 
     finally:
         env.close()
