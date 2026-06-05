@@ -35,14 +35,8 @@ def _resolve_eval_device(force_cpu=False):
     if force_cpu:
         return torch.device("cpu")
     if torch.cuda.is_available():
-        vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
-        if vram_gb >= 8.0:
-            print(f"[eval] GPU: {torch.cuda.get_device_name(0)} "
-                  f"({vram_gb:.1f}GB) — using CUDA")
-            return torch.device("cuda:0")
-        else:
-            print(f"[eval] GPU VRAM: {vram_gb:.1f}GB < 8GB — forcing CPU")
-            return torch.device("cpu")
+        print(f"[eval] GPU: {torch.cuda.get_device_name(0)} — using CUDA")
+        return torch.device("cuda:0")
     return torch.device("cpu")
 
 _force_cpu   = "--cpu" in sys.argv
