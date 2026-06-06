@@ -174,10 +174,31 @@ class MOT17Env(gym.Env):
         if frame_rgb is None:
             return np.zeros(3, dtype=np.float32), []
 
-        # Transformation on CPU numpy — no GPU round-trip needed
-        transformed      = apply_transformation(frame_rgb, action)
-        frame_no         = self._frame_idx + 1
-        xywh, confs      = self._det_map.get(frame_no, ([], []))
-        state, active_ids = self._extractor.update(transformed, xywh, confs)
+        # Transformation on CPU numpy
+        transformed = apply_transformation(frame_rgb, action)
+        
+        # LIVE DETECTION: If a live detector was injected, run it on the defended frame!
+        if getattr(self, "live_detector", None) is not None:
+            import torch
+            from torchvision.transforms import functional as TF
+            tensor = TF.to_tensor(transformed).unsqueeze(0).to(self.live_device)
+            
+            with torch.no_grad():
+                preds = self.live_detector(tensor)[0]
+                
+            xywh, confs = [], []
+            boxes  = preds["boxes"].cpu().numpy()
+            scores = preds["scores"].cpu().numpy()
+            labels = preds["labels"].cpu().numpy()
+            
+            for b, s, l in zip(boxes, scores, labels):
+                if l == 1 and s > 0.5:
+                    xywh.append([b[0], b[1], b[2] - b[0], b[3] - b[1]])
+                    confs.append(float(s))
+        else:
+            # BASELINE: Just use the pre-computed static detections
+            frame_no    = self._frame_idx + 1
+            xywh, confs = self._det_map.get(frame_no, ([], []))
 
+        state, active_ids = self._extractor.update(transformed, xywh, confs)
         return state, active_ids
