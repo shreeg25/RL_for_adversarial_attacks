@@ -162,18 +162,24 @@ def find_best_target(seq_path, min_frames=80, min_visibility=0.6):
 
 def run_condition(seq_path, agent, label, target_bboxes,
                   deterministic=False, iou_thresh=0.3):
-    """
-    Runs one condition.
-    agent=None → no defense (always T0).
-    target_bboxes: {frame_no: [x,y,w,h]} from GT of the target pedestrian.
-    """
     from src.mot_env import MOT17Env
+    import torchvision
+    from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
 
     cfg = yaml.safe_load(open("config.yaml"))
     env = MOT17Env(seq_path,
                    w1=cfg["reward"]["w1"],
                    w2=cfg["reward"]["w2"],
                    w3=cfg["reward"]["w3"])
+
+    # INJECT LIVE DETECTOR: Only needed when the MTD Agent is actively transforming frames
+    if agent is not None:
+        import torchvision
+        from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
+        env.live_detector = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+        ).to(_EVAL_DEVICE).eval()
+        env.live_device = _EVAL_DEVICE
 
     obs, _ = env.reset()
     if env._extractor is not None:
@@ -186,26 +192,51 @@ def run_condition(seq_path, agent, label, target_bboxes,
     frame_no            = 1
     done                = False
 
+    original_target_id = None  # <--- CRITICAL: Tracking the continuous identity
+
     try:
-        while not done:
-            if agent is not None:
-                action, _ = agent.predict(obs, deterministic=deterministic)
-                action = int(action)
-            else:
-                action = 0
+        from tqdm import tqdm
+        with tqdm(total=env._n_frames, desc=f"    {label}", leave=False, unit="frame") as pbar:
+            while not done:
+                if agent is not None:
+                    action, _ = agent.predict(obs, deterministic=deterministic)
+                    action = int(action)
+                else:
+                    action = 0   # baseline — always T0
 
-            obs, _, done, _, info = env.step(action)
-            total_id_sw          += int(info["id_switches"])
-            action_counts[action] += 1
+                obs, _, done, _, info = env.step(action)
+                total_id_sw += int(info["id_switches"])
+                action_counts[action] += 1
 
-            # ── IoU-based target presence check ──────────────────────
-            gt_bbox = target_bboxes.get(frame_no)
-            if gt_bbox is not None:
-                total_target_frames += 1
-                if not target_is_tracked(env, gt_bbox, iou_thresh):
-                    lost_frames += 1
+                # Check if the target exists in Ground Truth for this frame
+                gt_box = target_bboxes.get(frame_no)
+                if gt_box is not None:
+                    total_target_frames += 1
+                    
+                    tracks = [t for t in env._extractor.tracker.tracker.tracks if t.is_confirmed()]
+                    
+                    active_target_id = None
+                    for t in tracks:
+                        trk_box = t.to_tlwh().tolist()
+                        # Use the strict 0.5 IoU for tracking verification
+                        if bbox_iou(gt_box, trk_box) >= 0.5:
+                            active_target_id = t.track_id
+                            break
+                            
+                    if active_target_id is None:
+                        # Target is completely lost spatially
+                        lost_frames += 1
+                    else:
+                        # Target is found. Lock in its ID if we haven't yet.
+                        if original_target_id is None:
+                            original_target_id = active_target_id
+                        
+                        # If the current ID doesn't match the original, the attack broke the identity!
+                        elif active_target_id != original_target_id:
+                            lost_frames += 1
 
-            frame_no += 1
+                frame_no += 1
+                pbar.update(1)
 
     finally:
         env.close()
