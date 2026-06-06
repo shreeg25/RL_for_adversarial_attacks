@@ -9,3 +9,4 @@ sync_changes.bundle
 outputs/eval_per_frame.csv
 outputs/eval_per_frame_clean.csv
 
+src/__pycache__/mot_env.cpython-311.pyc
