@@ -8,12 +8,16 @@ Attacker assumptions (blackbox):
   - Only knows a person detector (Faster R-CNN) is present
   - Uses PhysicalRenderer for EOT to simulate real-world variance
 
-This is the ablation counterpart to generate_whitebox_attack.py.
-The whitebox vs blackbox ASR gap in evaluate_attack_success.py
-directly quantifies how much the BPDA knowledge advantage is worth.
+Usage:
+    # Attack a specific sequence:
+    python adversarial_attack_scripts/generate_blackbox_attack.py --seq MOT17-02-FRCNN
+    python adversarial_attack_scripts/generate_blackbox_attack.py --seq MOT17-09-FRCNN
 
-Fixes applied vs whitebox baseline:
-  Same FIX-1..8 as whitebox, MINUS the BPDA wrapper and action cycling.
+    # Attack ALL extra_sequences listed in config.yaml automatically:
+    python adversarial_attack_scripts/generate_blackbox_attack.py --all
+
+    # Attack the primary seq_path sequence (original behaviour):
+    python adversarial_attack_scripts/generate_blackbox_attack.py
 """
 
 import sys
@@ -38,10 +42,10 @@ from adversarial_attack_scripts.generate_whitebox_attack import (
 )
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
-N_EOT   = 3       # Down from 10
+N_EOT   = 3
 EPSILON = 1.0
-ALPHA   = 0.1     # Up from 0.05
-ITERS   = 15      # Down from 40
+ALPHA   = 0.1
+ITERS   = 15
 
 
 # ── PGD + EOT (no BPDA, no action knowledge) ─────────────────────────────────
@@ -80,26 +84,26 @@ def optimize_patch_blackbox(
 
             # ── Safe Injection ──────────────────────────────────────────
             poisoned = frame.clone()
-            region = poisoned[:, :, y1:y2, x1:x2]
-            
-            # Force region into PyTorch layout (B, C, H, W)
+            region   = poisoned[:, :, y1:y2, x1:x2]
+
             if region.shape[-1] == 3:
                 region = region.permute(0, 3, 1, 2)
-                
-            # Align spatial dimensions
+
             if phys_patch.shape[-2:] != region.shape[-2:]:
-                phys_patch = F.interpolate(phys_patch, size=(region.shape[2], region.shape[3]), 
-                                           mode="bilinear", align_corners=False)
+                phys_patch = F.interpolate(
+                    phys_patch,
+                    size=(region.shape[2], region.shape[3]),
+                    mode="bilinear", align_corners=False
+                )
 
             injected_region = torch.clamp(region + phys_patch, 0.0, 1.0)
-            
-            # Permute back if the original frame was in NumPy layout
+
             if poisoned.shape[-1] == 3:
                 injected_region = injected_region.permute(0, 2, 3, 1)
-                
+
             poisoned[:, :, y1:y2, x1:x2] = injected_region
 
-            # ── No BPDA here — raw detector, no defense knowledge ─────
+            # ── No BPDA — raw detector, no defense knowledge ──────────
             preds   = model([poisoned[0]])[0]
             t_score = _get_target_score(preds, x1, y1, x2, y2)
 
@@ -131,21 +135,27 @@ def optimize_patch_blackbox(
     return patch_data.detach()
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Per-sequence attack runner ────────────────────────────────────────────────
 
-if __name__ == "__main__":
-
-    cfg      = yaml.safe_load(open("config.yaml"))
-    seq_path = cfg["data"]["seq_path"]
+def run_blackbox_attack_on_sequence(seq_path: str, cfg: dict):
+    """
+    Runs the full blackbox attack pipeline on a single MOT17 sequence.
+    Creates:  <parent>/<SEQ_NAME>-Blackbox/
+    """
+    seq_name = os.path.basename(seq_path)
     parent   = os.path.dirname(seq_path)
 
-    out_base    = os.path.join(parent, "MOT17-04-Blackbox")
+    out_base    = os.path.join(parent, f"{seq_name}-Blackbox")
     out_img_dir = os.path.join(out_base, "img1")
     out_gt_dir  = os.path.join(out_base, "gt")
     out_det_dir = os.path.join(out_base, "det")
     os.makedirs(out_img_dir, exist_ok=True)
     os.makedirs(out_gt_dir,  exist_ok=True)
     os.makedirs(out_det_dir, exist_ok=True)
+
+    print(f"\n{'='*60}")
+    print(f"  BLACKBOX ATTACK → {seq_name}")
+    print(f"{'='*60}")
 
     print("[*] Copying GT and det files...")
     shutil.copy(os.path.join(seq_path, "gt",  "gt.txt"),
@@ -158,10 +168,10 @@ if __name__ == "__main__":
     s_frame = target["start_frame"]
     e_frame = target["end_frame"]
 
-    print(f"\n[*] Blackbox attack — Target ID={tid}  "
-          f"frames {s_frame}→{e_frame}  N_EOT={N_EOT}  (no BPDA)")
+    print(f"[*] Target ID={tid}  frames {s_frame}→{e_frame}  "
+          f"N_EOT={N_EOT}  (no BPDA)")
 
-    cols   = ["frame","id","x","y","w","h","active","class","visibility"]
+    cols   = ["frame", "id", "x", "y", "w", "h", "active", "class", "visibility"]
     df_gt  = pd.read_csv(os.path.join(seq_path, "gt", "gt.txt"),
                          header=None, names=cols)
     tgt_gt = df_gt[df_gt["id"] == tid]
@@ -200,9 +210,10 @@ if __name__ == "__main__":
             if tensor is None:
                 break
 
-            # Convert the NumPy array frame safely to a torch tensor and NORMALIZE
             if isinstance(tensor, np.ndarray):
-                frame_t = torch.from_numpy(tensor).unsqueeze(0).permute(0, 3, 1, 2).to(device).float() / 255.0
+                frame_t = (torch.from_numpy(tensor)
+                           .unsqueeze(0).permute(0, 3, 1, 2)
+                           .to(device).float() / 255.0)
             else:
                 if tensor.ndim == 4 and tensor.shape[-1] == 3:
                     frame_t = tensor.permute(0, 3, 1, 2).to(device).float() / 255.0
@@ -219,7 +230,6 @@ if __name__ == "__main__":
             w  = max(1, int(row["w"].values[0]))
             h  = max(1, int(row["h"].values[0]))
 
-            # Clamp to frame bounds
             _, _, fh, fw = frame_t.shape
             x1 = min(x1, fw - 2); x2 = min(x1 + w, fw)
             y1 = min(y1, fh - 2); y2 = min(y1 + h, fh)
@@ -241,19 +251,19 @@ if __name__ == "__main__":
                 n_eot    = N_EOT,
             )
 
-            # ── Final physical injection ──────────────────────────────
+            # Final physical injection
             poisoned   = frame_t.clone()
             phys_final = renderer.apply(patch, bbox_w=w, bbox_h=h)
-            
+
             region_final = poisoned[:, :, y1:y1+h, x1:x1+w]
             if region_final.shape[-1] == 3:
                 region_final = region_final.permute(0, 3, 1, 2)
-                
+
             injected_final = torch.clamp(region_final + phys_final, 0.0, 1.0)
-            
+
             if poisoned.shape[-1] == 3:
                 injected_final = injected_final.permute(0, 2, 3, 1)
-                
+
             poisoned[:, :, y1:y1+h, x1:x1+w] = injected_final
 
             save_path = os.path.join(out_img_dir, f"{frame_idx:06d}.jpg")
@@ -264,6 +274,62 @@ if __name__ == "__main__":
         prefetcher.stop()
 
     print(f"\n[*] Done.  Attacked={attacked}  Skipped={skipped}")
-    print(f"[*] Blackbox sequence → {out_base}")
-    print("[*] Next step: run generate_poisoned_detections.py "
-          "(point it at MOT17-04-Blackbox)")
+    print(f"[*] Blackbox sequence saved → {out_base}")
+    print("[*] Next: run generate_poisoned_detections.py "
+          f"--seq_path {out_base}")
+    return out_base
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="TRACE — Blackbox Attack Generator"
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--seq",
+        type=str,
+        default=None,
+        help=(
+            "Name of sequence to attack (e.g. MOT17-02-FRCNN). "
+            "Must exist inside data/MOT17/train/. "
+            "If omitted without --all, attacks the primary seq_path."
+        ),
+    )
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Attack ALL extra_sequences listed in config.yaml automatically.",
+    )
+    args = parser.parse_args()
+
+    cfg = yaml.safe_load(open("config.yaml"))
+
+    if args.all:
+        targets = cfg["data"].get("extra_sequences", [])
+        if not targets:
+            print("[!] No extra_sequences found in config.yaml. "
+                  "Add sequences under data.extra_sequences.")
+            sys.exit(1)
+        print(f"[*] --all mode: attacking {len(targets)} sequence(s).")
+    elif args.seq:
+        base_data_dir = os.path.dirname(cfg["data"]["seq_path"])
+        seq_path = os.path.join(base_data_dir, args.seq)
+        if not os.path.exists(seq_path):
+            print(f"[!] Sequence not found: {seq_path}")
+            sys.exit(1)
+        targets = [seq_path]
+    else:
+        # Default: attack the primary seq_path (original behaviour)
+        targets = [cfg["data"]["seq_path"]]
+
+    for seq_path in targets:
+        if not os.path.exists(seq_path):
+            print(f"[skip] Not found: {seq_path}")
+            continue
+        run_blackbox_attack_on_sequence(seq_path, cfg)
+
+    print("\n[*] All blackbox attacks complete.")
