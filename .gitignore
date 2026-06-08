@@ -1,15 +1,13 @@
 data/
 venv/
 .pytest_cache/
-*/__pycache__/
+*__pycache__/
 TRACE_Architecture_Overview.docx
 architecture.png
 architecturev2.png
 sync_changes.bundle
 outputs/eval_per_frame.csv
 outputs/eval_per_frame_clean.csv
-
-src/__pycache__/mot_env.cpython-311.pyc
 architecturev3.jpeg
 architecturev3.png
 adversarial_attack_scripts/__pycache__
