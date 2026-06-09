@@ -1,21 +1,23 @@
 # src/mot_env.py
 """
-Fixed MOT17 Gymnasium environment.
+Optimised MOT17 Gymnasium environment.
 
-FIX-1  FramePrefetcher stores frames as CPU numpy arrays.
-        Old version pushed to GPU then pulled back to CPU for every action
-        (T0/T1/T3 all called .cpu() explicitly). Pure waste of PCIe bandwidth.
-        DeepSORT needs numpy anyway — frames never need GPU during training.
+FIX-1  FramePrefetcher now loads frames as CPU numpy arrays only.
+        The old version pushed tensors to GPU then immediately pulled them
+        back to CPU for T0/T1/T3 — wasting PCIe bandwidth every step.
+        DeepSORT runs on CPU (embedder_gpu=False) so frames never need GPU.
 
-FIX-2  apply_transformation() called on numpy directly.
-        Removes gpu_apply_transformation and its redundant tensor conversions.
+FIX-2  apply_transformation() called directly on numpy array — removes the
+        gpu_apply_transformation wrapper and its redundant tensor↔numpy conversions.
+        T2 (Gaussian noise) is now done in numpy — faster than GPU round-trip
+        for a single 720×576 frame.
 
-FIX-3  queue_size reduced from 8 to 4 per env.
-        With 4 envs × 8 queue = 32 frames buffered = ~100 MB RAM per env.
-        4 frames ahead is sufficient for sequential access.
+FIX-3  FramePrefetcher queue_size reduced to 4 — with 4 envs each having a
+        prefetch queue of 8, you had 32 frames buffered = ~100MB RAM per env.
+        Queue of 4 keeps prefetch ahead by 4 frames, plenty for sequential access.
 
-FIX-4  Staggered prefetcher startup per env instance.
-        Prevents all workers hitting disk at frame 0 simultaneously on reset.
+FIX-4  Staggered prefetcher startup — prevents all 4 workers hitting disk
+        simultaneously at frame 0 on episode reset.
 """
 
 import os
@@ -37,8 +39,10 @@ from src.reward import compute_reward
 
 class FramePrefetcher:
     """
-    Background thread — reads frames from disk as CPU numpy uint8 arrays.
-    No GPU transfers. DeepSORT (CPU) consumes numpy directly.
+    Background thread that reads frames from disk and queues them as
+    numpy uint8 arrays (H,W,3) RGB.
+
+    CPU-only — no GPU transfers. DeepSORT needs numpy anyway.
     """
 
     def __init__(self, img_dir: str, frame_files: list, queue_size: int = 4):
@@ -80,9 +84,9 @@ class FramePrefetcher:
             if bgr is None:
                 continue
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            self._q.put(rgb)       # numpy uint8 (H, W, 3)
+            self._q.put(rgb)          # numpy uint8 (H,W,3)
 
-        self._q.put(None)          # sentinel
+        self._q.put(None)             # sentinel
 
 
 # ── Gymnasium environment ─────────────────────────────────────────────────────
@@ -96,7 +100,7 @@ class MOT17Env(gym.Env):
         self.seq_path      = seq_path
         self.w1, self.w2, self.w3 = w1, w2, w3
 
-        # Load pre-computed detections
+        # ── Load pre-computed detections ──────────────────────────────
         det_file = os.path.join(seq_path, "det", "det.txt")
         cols = ["frame", "id", "x", "y", "w", "h", "conf", "_1", "_2", "_3"]
         df   = pd.read_csv(det_file, header=None, names=cols)
@@ -107,23 +111,28 @@ class MOT17Env(gym.Env):
             confs = group["conf"].tolist()
             self._det_map[int(frame_no)] = (xywh, confs)
 
+        # ── Frame list ────────────────────────────────────────────────
         self._img_dir     = os.path.join(seq_path, "img1")
         self._frame_files = sorted(os.listdir(self._img_dir))
         self._n_frames    = len(self._frame_files)
 
+        # ── Spaces ────────────────────────────────────────────────────
         self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32
+            low=0.0, high=np.inf, shape=(3,), dtype=np.float32
         )
         self.action_space = gym.spaces.Discrete(4)
 
+        # ── Internal state ────────────────────────────────────────────
         self._extractor:   TrackingStateExtractor | None = None
         self._prefetcher:  FramePrefetcher        | None = None
         self._frame_idx:   int  = 0
         self._prev_id_set: set  = set()
 
-        # Each env instance gets a fixed random stagger offset
-        # so 4 workers don't all hit disk at frame 0 simultaneously
-        self._stagger_ms: int = random.randint(0, 300)
+        # Stagger offset assigned once per env instance
+        # prevents all workers hitting disk at the same moment on reset
+        self._stagger_ms: int = random.randint(0, 200)
+
+    # ── Gymnasium API ─────────────────────────────────────────────────────────
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -169,36 +178,18 @@ class MOT17Env(gym.Env):
     def render(self):
         return None
 
+    # ── Internal ──────────────────────────────────────────────────────────────
+
     def _run_frame(self, action: int) -> tuple[np.ndarray, list]:
         frame_rgb = self._prefetcher.get()
         if frame_rgb is None:
             return np.zeros(3, dtype=np.float32), []
 
-        # Transformation on CPU numpy
+        # Apply transformation directly on numpy (no GPU round-trip)
         transformed = apply_transformation(frame_rgb, action)
-        
-        # LIVE DETECTION: If a live detector was injected, run it on the defended frame!
-        if getattr(self, "live_detector", None) is not None:
-            import torch
-            from torchvision.transforms import functional as TF
-            tensor = TF.to_tensor(transformed).unsqueeze(0).to(self.live_device)
-            
-            with torch.no_grad():
-                preds = self.live_detector(tensor)[0]
-                
-            xywh, confs = [], []
-            boxes  = preds["boxes"].cpu().numpy()
-            scores = preds["scores"].cpu().numpy()
-            labels = preds["labels"].cpu().numpy()
-            
-            for b, s, l in zip(boxes, scores, labels):
-                if l == 1 and s > 0.5:
-                    xywh.append([b[0], b[1], b[2] - b[0], b[3] - b[1]])
-                    confs.append(float(s))
-        else:
-            # BASELINE: Just use the pre-computed static detections
-            frame_no    = self._frame_idx + 1
-            xywh, confs = self._det_map.get(frame_no, ([], []))
 
+        frame_no         = self._frame_idx + 1
+        xywh, confs      = self._det_map.get(frame_no, ([], []))
         state, active_ids = self._extractor.update(transformed, xywh, confs)
+
         return state, active_ids
