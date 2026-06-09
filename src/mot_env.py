@@ -94,11 +94,11 @@ class FramePrefetcher:
 class MOT17Env(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
 
-    def __init__(self, seq_path: str, w1: float = 1.0,
-                 w2: float = 5.0, w3: float = 0.5):
+    def __init__(self, seq_path: str, w1: float = 2.0,
+                 w2: float = 1.5, w3: float = 0.01, w4: float = 3.0):
         super().__init__()
-        self.seq_path      = seq_path
-        self.w1, self.w2, self.w3 = w1, w2, w3
+        self.seq_path = seq_path
+        self.w1, self.w2, self.w3, self.w4 = w1, w2, w3, w4
 
         # ── Load pre-computed detections ──────────────────────────────
         det_file = os.path.join(seq_path, "det", "det.txt")
@@ -159,7 +159,7 @@ class MOT17Env(gym.Env):
             prev_id_set=self._prev_id_set,
             current_ids=active_ids,
             action=action,
-            w1=self.w1, w2=self.w2, w3=self.w3,
+            w1=self.w1, w2=self.w2, w3=self.w3, w4=self.w4,
         )
 
         self._prev_id_set = set(active_ids)

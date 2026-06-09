@@ -52,13 +52,14 @@ if __name__ == "__main__":
     def make_parallel_env(rank):
         def _init():
             import torch
-            torch.set_num_threads(1) # Block process core thrashing
+            torch.set_num_threads(1) 
             assigned_seq = all_sequences[rank % len(all_sequences)]
             return MOT17Env(
                 seq_path=assigned_seq,
                 w1=cfg["reward"]["w1"],
                 w2=cfg["reward"]["w2"],
                 w3=cfg["reward"]["w3"],
+                w4=cfg["reward"]["w4"], # Link the new weight
             )
         return _init
 
