@@ -78,5 +78,5 @@ def generate_poisoned_det(poisoned_seq_path: str):
 if __name__ == "__main__":
     cfg = yaml.safe_load(open("config.yaml"))
     parent        = os.path.dirname(cfg["data"]["seq_path"])
-    poisoned_path = os.path.join(parent, "MOT17-04-Blackbox")
+    poisoned_path = os.path.join(parent, "MOT17-04-FRCNN-Whitebox")
     generate_poisoned_det(poisoned_path)
