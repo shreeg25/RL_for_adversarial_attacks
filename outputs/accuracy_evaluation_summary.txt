@@ -1,0 +1,20 @@
+TRACE — Accuracy Evaluation Summary
+============================================================
+  Policy mode : stochastic (EOT defense)
+  Sequences   : 3
+
+COLUMN 1 — Clean | T0 Baseline (Global micro-agg)
+  MOTA        : 54.72%
+  MOTP        : 87.64%
+  IDF1        : 75.86%
+  Precision   : 81.89%
+  Recall      : 70.65%
+  ID_sw       : 164
+
+COLUMN 2 — Clean | MTD-PPO Agent (Global micro-agg)
+  MOTA        : 54.27%
+  MOTP        : 87.66%
+  IDF1        : 75.63%
+  Precision   : 81.59%
+  Recall      : 70.48%
+  ID_sw       : 159
