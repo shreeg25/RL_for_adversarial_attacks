@@ -2,11 +2,6 @@
 """
 Optimised MOT17 Gymnasium environment.
 
-FIX-1  FramePrefetcher now loads frames as CPU numpy arrays only.
-        The old version pushed tensors to GPU then immediately pulled them
-        back to CPU for T0/T1/T3 — wasting PCIe bandwidth every step.
-        DeepSORT runs on CPU (embedder_gpu=False) so frames never need GPU.
-
 FIX-2  apply_transformation() called directly on numpy array — removes the
         gpu_apply_transformation wrapper and its redundant tensor↔numpy conversions.
         T2 (Gaussian noise) is now done in numpy — faster than GPU round-trip
