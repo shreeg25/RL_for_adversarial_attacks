@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath("."))
 import torch
 import yaml
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from src.mot_env import MOT17Env
 from src.device import DEVICE
@@ -81,28 +81,51 @@ if __name__ == "__main__":
     # --------------------------------------------------------------
     def make_vec_envs(seq_list, attack_prob: float):
         n_envs = min(cfg["device"].get("n_envs", 4), len(seq_list))
-        def make_parallel_env(rank):
-            def _init():
-                import torch
-                torch.set_num_threads(1)
-                # Assign a sequence from the list (round‑robin across envs)
-                assigned_seq = seq_list[rank % len(seq_list)]
-                env = MOT17Env(
-                    seq_path=assigned_seq,
-                    w1=cfg["reward"]["w1"],
-                    w2=cfg["reward"]["w2"],
-                    w3=cfg["reward"]["w3"],
-                    w4=cfg["reward"]["w4"],
-                )
-                # inject the attack probability for this env instance
-                env.set_attack_prob(attack_prob)
-                # make config available to the env for reward w0 lookup
-                env._cfg = cfg
-                return env
-            return _init
+        # Use DummyVecEnv for n_envs == 1 to avoid multiprocessing pickling issues on Windows
+        if n_envs == 1:
+            def make_env(rank):
+                def _init():
+                    import torch
+                    torch.set_num_threads(1)
+                    # Assign a sequence from the list (round‑robin across envs)
+                    assigned_seq = seq_list[rank % len(seq_list)]
+                    env = MOT17Env(
+                        seq_path=assigned_seq,
+                        w1=cfg["reward"]["w1"],
+                        w2=cfg["reward"]["w2"],
+                        w3=cfg["reward"]["w3"],
+                        w4=cfg["reward"]["w4"],
+                    )
+                    # inject the attack probability for this env instance
+                    env.set_attack_prob(attack_prob)
+                    # make config available to the env for reward w0 lookup
+                    env._cfg = cfg
+                    return env
+                return _init
+            return DummyVecEnv([make_env(i) for i in range(n_envs)]), n_envs
+        else:
+            def make_parallel_env(rank):
+                def _init():
+                    import torch
+                    torch.set_num_threads(1)
+                    # Assign a sequence from the list (round‑robin across envs)
+                    assigned_seq = seq_list[rank % len(seq_list)]
+                    env = MOT17Env(
+                        seq_path=assigned_seq,
+                        w1=cfg["reward"]["w1"],
+                        w2=cfg["reward"]["w2"],
+                        w3=cfg["reward"]["w3"],
+                        w4=cfg["reward"]["w4"],
+                    )
+                    # inject the attack probability for this env instance
+                    env.set_attack_prob(attack_prob)
+                    # make config available to the env for reward w0 lookup
+                    env._cfg = cfg
+                    return env
+                return _init
 
-        vec_env = SubprocVecEnv([make_parallel_env(i) for i in range(n_envs)])
-        return vec_env, n_envs
+            vec_env = SubprocVecEnv([make_parallel_env(i) for i in range(n_envs)])
+            return vec_env, n_envs
 
     # --------------------------------------------------------------
     # Loop over curriculum stages

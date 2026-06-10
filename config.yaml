@@ -42,4 +42,4 @@ device:
   mixed_precision: true     # uses FP16 where possible, cuts memory ~2×
   num_workers: 2            # fewer CPU workers for data loading
   pin_memory: true
-  n_envs: 2                 # parallel environments (reduced from 3)
+  n_envs: 1                 # single environment to avoid multiprocessing pickling issues on Windows
