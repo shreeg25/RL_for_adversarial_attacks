@@ -77,14 +77,13 @@ def _image_stats(frame: np.ndarray) -> np.ndarray:
 class TrackingStateExtractor:
 
       def __init__(self):
-          # embedder_gpu=False: workers use CPU for ReID
           # prevents n_envs CUDA contexts fighting over same GPU
           self.tracker = DeepSort(
               max_age=30,
               n_init=3,
               nn_budget=100,
               max_cosine_distance=0.4,
-              embedder_gpu=False,   # <-- changed to False for 8 GB GPU
+              embedder_gpu=True,   
           )
           self._prev_conf: dict[int, float] = {}
           self._prev_cxcy: dict[int, tuple] = {}
@@ -96,7 +95,7 @@ class TrackingStateExtractor:
               n_init=3,
               nn_budget=100,
               max_cosine_distance=0.4,
-              embedder_gpu=False,
+              embedder_gpu=True,
           )
           self._prev_conf.clear()
           self._prev_cxcy.clear()
