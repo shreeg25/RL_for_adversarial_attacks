@@ -1,9 +1,16 @@
-# config.yaml (updated)
+# config.yaml
 data:
   seq_path: data/MOT17/train/MOT17-04-FRCNN
   extra_sequences:
     - data/MOT17/train/MOT17-02-FRCNN
     - data/MOT17/train/MOT17-09-FRCNN
+    - data/MOT17/train/MOT17-02-FRCNN-Whitebox
+    - data/MOT17/train/MOT17-02-FRCNN-Blackbox
+    - data/MOT17/train/MOT17-04-FRCNN-Whitebox
+    - data/MOT17/train/MOT17-04-FRCNN-Blackbox
+    - data/MOT17/train/MOT17-09-FRCNN-Whitebox
+    - data/MOT17/train/MOT17-09-FRCNN-Blackbox
+  validation_fraction: 0.2   # fraction of sequences to hold out for validation
 
 reward:
   w1: 2.0
