@@ -1,26 +1,27 @@
-# config.yaml
+# config.yaml (updated)
 data:
-  seq_path: data/MOT17/train/MOT17-04-FRCNN     
-  extra_sequences:                               
+  seq_path: data/MOT17/train/MOT17-04-FRCNN
+  extra_sequences:
     - data/MOT17/train/MOT17-02-FRCNN
     - data/MOT17/train/MOT17-09-FRCNN
 
 reward:
-  w1: 2.0      
-  w2: 1.5      
+  w1: 2.0
+  w2: 1.5
   w3: 0.01
-  w4: 3.0      
+  w4: 3.0
+  w0: 1.0       # gating bonus weight
 
 ppo:
   total_timesteps: 500000
-  n_steps: 4096           # Increased to accumulate bigger data rolls per cycle
-  batch_size: 512         # Scaled up from 64 to fill GPU thread capacities
+  n_steps: 1024           # smaller rollout → less GPU memory per step
+  batch_size: 128         # smaller batch → fits comfortably in 8 GB
   n_epochs: 10
   learning_rate: 0.0003
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
-  ent_coef: 0.05          
+  ent_coef: 0.05
   net_arch: [64, 64]
 
 paths:
@@ -30,8 +31,8 @@ paths:
 
 device:
   use_gpu: true
-  gpu_id: 0                
-  mixed_precision: true    
-  num_workers: 4           
-  pin_memory: true  
-  n_envs: 3               # Sets 1 dedicated worker process per active tracking track
+  gpu_id: 0
+  mixed_precision: true     # uses FP16 where possible, cuts memory ~2×
+  num_workers: 2            # fewer CPU workers for data loading
+  pin_memory: true
+  n_envs: 2                 # parallel environments (reduced from 3)
