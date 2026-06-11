@@ -1,45 +1,44 @@
-# config.yaml
+# config.yaml — 12D ATTENTION + COUNTERFACTUAL REWARD
+
 data:
   seq_path: data/MOT17/train/MOT17-04-FRCNN
-  extra_sequences:
+
+  train_sequences:
+    - data/MOT17/train/MOT17-04-FRCNN
     - data/MOT17/train/MOT17-02-FRCNN
-    - data/MOT17/train/MOT17-09-FRCNN
-    - data/MOT17/train/MOT17-02-FRCNN-Whitebox
-    - data/MOT17/train/MOT17-02-FRCNN-Blackbox
     - data/MOT17/train/MOT17-04-FRCNN-Whitebox
+    - data/MOT17/train/MOT17-02-FRCNN-Whitebox
     - data/MOT17/train/MOT17-04-FRCNN-Blackbox
+    - data/MOT17/train/MOT17-02-FRCNN-Blackbox
+
+  extra_sequences:
+    - data/MOT17/train/MOT17-09-FRCNN
     - data/MOT17/train/MOT17-09-FRCNN-Whitebox
     - data/MOT17/train/MOT17-09-FRCNN-Blackbox
-  validation_fraction: 0.2   # fraction of sequences to hold out for validation
 
 reward:
-  w1: 2.0
-  w2: 1.5
-  w3: 0.01
-  w4: 3.0
-  w0: 1.0       # gating bonus weight
+  w_rec:  5.0       
+  w_fp:   2.0       
+  w_lost: 0.5       
+  w_cost: 1.0       
 
 ppo:
-  total_timesteps: 500000
-  n_steps: 1024           # smaller rollout → less GPU memory per step
-  batch_size: 128         # smaller batch → fits comfortably in 8 GB
+  total_timesteps: 150000 
+  n_steps: 1024
+  batch_size: 128
   n_epochs: 10
   learning_rate: 0.0003
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
   ent_coef: 0.05
-  net_arch: [64, 64]
+  net_arch: [128, 128] # Expanded for 12D state
 
 paths:
   model_save: outputs/mtd_ppo_agent
   tb_logs: outputs/tb_logs
-  debug_csv: outputs/state_debug.csv
 
 device:
   use_gpu: true
   gpu_id: 0
-  mixed_precision: true     # uses FP16 where possible, cuts memory ~2×
-  num_workers: 2            # fewer CPU workers for data loading
-  pin_memory: true
-  n_envs: 4                # single environment to avoid multiprocessing pickling issues on Windows
+  n_envs: 2
