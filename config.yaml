@@ -41,4 +41,4 @@ paths:
 device:
   use_gpu: true
   gpu_id: 0
-  n_envs: 2
+  n_envs: 1
