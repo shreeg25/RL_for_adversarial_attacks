@@ -123,8 +123,8 @@ class MOT17Env(gym.Env):
         self._gt = self._load_gt(seq_path)
 
         self.observation_space = gym.spaces.Box(
-            low=0.0, high=np.inf, shape=(3,), dtype=np.float32
-        )
+    low=-np.inf, high=np.inf, shape=(12,), dtype=np.float32
+)
         self.action_space = gym.spaces.Discrete(4)
 
         self._extractor   = None
