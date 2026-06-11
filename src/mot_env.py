@@ -113,9 +113,12 @@ class MOT17Env(gym.Env):
 
         # ── Spaces ────────────────────────────────────────────────────
         self.observation_space = gym.spaces.Box(
-            low=0.0, high=np.inf, shape=(7,), dtype=np.float32   # <-- now 7‑dim
+            low=-np.inf, high=np.inf, shape=(12,), dtype=np.float32 # <-- Updated to 12-dim
         )
         self.action_space = gym.spaces.Discrete(4)
+        
+        # Add target box memory
+        self._last_target_box = None
 
         # ── Internal state ────────────────────────────────────────────
         self._extractor:   TrackingStateExtractor | None = None
@@ -139,12 +142,12 @@ class MOT17Env(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-
         if self._prefetcher is not None:
             self._prefetcher.stop()
 
         self._frame_idx   = 0
         self._prev_id_set = set()
+        self._last_target_box = None # <-- Reset targeting
         self._extractor   = TrackingStateExtractor()
 
         self._prefetcher = FramePrefetcher(
@@ -203,24 +206,20 @@ class MOT17Env(gym.Env):
         return frame
 
     def _run_frame(self, action: int) -> tuple[np.ndarray, list, np.ndarray]:
-        """
-        Returns:
-            obs        – the 7‑dim observation from the state extractor
-            active_ids – list of confirmed track IDs after processing this frame
-            frame_rgb  – the raw (unaltered) RGB frame as np.uint8, needed for reward gating bonus
-        """
         frame_rgb = self._prefetcher.get()
         if frame_rgb is None:
-            return np.zeros(7, dtype=np.float32), [], np.zeros((0,0,3), dtype=np.uint8)
+            return np.zeros(12, dtype=np.float32), [], np.zeros((0,0,3), dtype=np.uint8)
 
-        # Agent‑chosen transformation (T0‑T3)
-        transformed = apply_transformation(frame_rgb, action)
+        # Apply transformation ONLY to the target box from the previous frame
+        transformed = apply_transformation(frame_rgb, action, self._last_target_box)
 
-        # Optional on‑the‑fly adversarial perturbation (independent of agent action)
         transformed = self._maybe_attack(transformed)
 
         frame_no         = self._frame_idx + 1
         xywh, confs      = self._det_map.get(frame_no, ([], []))
-        state, active_ids = self._extractor.update(transformed, xywh, confs)
+        
+        # Extractor now returns the target box for the *next* frame
+        state, active_ids, target_box = self._extractor.update(transformed, xywh, confs)
+        self._last_target_box = target_box
 
         return state, active_ids, frame_rgb
