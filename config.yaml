@@ -21,8 +21,8 @@ reward:
 
 ppo:
   total_timesteps: 500000
-  n_steps: 256           # smaller rollout → less GPU memory per step
-  batch_size: 32         # smaller batch → fits comfortably in 8 GB
+  n_steps: 1024           # smaller rollout → less GPU memory per step
+  batch_size: 128         # smaller batch → fits comfortably in 8 GB
   n_epochs: 10
   learning_rate: 0.0003
   gamma: 0.99
@@ -42,4 +42,4 @@ device:
   mixed_precision: true     # uses FP16 where possible, cuts memory ~2×
   num_workers: 2            # fewer CPU workers for data loading
   pin_memory: true
-  n_envs: 1                 # single environment to avoid multiprocessing pickling issues on Windows
+  n_envs: 4                # single environment to avoid multiprocessing pickling issues on Windows
