@@ -90,11 +90,14 @@ class FramePrefetcher:
 _DETECTOR = None
 
 
+from torchvision.models.detection import FasterRCNN_MobileNet_V3_Large_FPN_Weights
+
 def _get_detector():
     global _DETECTOR
     if _DETECTOR is None:
-        m = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-            weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+        # Swap ResNet50 for MobileNetV3 (Massive speedup, slight accuracy drop)
+        m = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
+            weights=FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
         )
         m.eval().to(DEVICE)
         _DETECTOR = m
