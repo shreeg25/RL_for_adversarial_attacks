@@ -165,10 +165,13 @@ def run_sequence(seq_path, agent=None, deterministic=False):
     from src.mot_env import MOT17Env
 
     cfg = yaml.safe_load(open("config.yaml"))
-    env = MOT17Env(seq_path,
-                   w1=cfg["reward"]["w1"],
-                   w2=cfg["reward"]["w2"],
-                   w3=cfg["reward"]["w3"])
+    env = MOT17Env(
+                seq_path,
+                w_rec=cfg["reward"]["w_rec"],
+                w_fp=cfg["reward"]["w_fp"],
+                w_lost=cfg["reward"]["w_lost"],
+                w_cost=cfg["reward"]["w_cost"],
+            )
 
     gt     = load_ground_truth(seq_path)
     obs, _ = env.reset()
