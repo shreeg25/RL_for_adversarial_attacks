@@ -1,171 +1,125 @@
 """
-    Optimised TrackingStateExtractor.
-
-  FIX-1  Removed O(N×M) IoU loop inside update() — was ~400 Python iterations
-          per frame. Replaced with vectorised numpy operations.
-  FIX-2  Moved sigmoid + math import to module level — was re-imported every step.
-  FIX-3  Removed duplicate `raw` computation (was built twice per call).
-  FIX-4  reset() re-instantiates tracker cleanly — delete_all_tracks() leaves
-          stale internal state in some deep_sort_realtime versions.
+Optimised TrackingStateExtractor with Heuristic Attention Routing.
+Calculates global tracking stats and isolates the most vulnerable bounding box.
 """
-
 import math
-import cv2          # <-- added for image statistics
+import cv2
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-
-# Module-level sigmoid — called thousands of times, must not re-import math
 def _sigmoid(x: float) -> float:
-      x = max(-10.0, min(10.0, x))
-      return 1.0 / (1.0 + math.exp(-x))
+    x = max(-10.0, min(10.0, x))
+    return 1.0 / (1.0 + math.exp(-x))
 
+def _best_iou_vectorised(tlwh: np.ndarray, det_boxes: np.ndarray, det_confs: np.ndarray) -> float:
+    if len(det_boxes) == 0:
+        return 0.0
+    t_x1, t_y1 = tlwh[0], tlwh[1]
+    t_x2, t_y2 = tlwh[0] + tlwh[2], tlwh[1] + tlwh[3]
+    d_x1 = det_boxes[:, 0]
+    d_y1 = det_boxes[:, 1]
+    d_x2 = det_boxes[:, 0] + det_boxes[:, 2]
+    d_y2 = det_boxes[:, 1] + det_boxes[:, 3]
 
- # Vectorised IoU: track_box [x,y,w,h] vs all det_boxes (N,4) numpy array
-def _best_iou_vectorised(
-      tlwh: np.ndarray,           # (4,) track box
-      det_boxes: np.ndarray,      # (N,4) detection boxes  [x,y,w,h]
-      det_confs: np.ndarray,      # (N,)  confidences (already sigmoid-scaled)
-  ) -> float:
-      """
-      Returns the detection confidence of the highest-IoU match.
-      Pure numpy — no Python loop over detections.
-      """
-      if len(det_boxes) == 0:
-          return 0.0
+    ix1 = np.maximum(t_x1, d_x1)
+    iy1 = np.maximum(t_y1, d_y1)
+    ix2 = np.minimum(t_x2, d_x2)
+    iy2 = np.minimum(t_y2, d_y2)
+    inter = np.maximum(0.0, ix2 - ix1) * np.maximum(0.0, iy2 - iy1)
 
-      # Convert [x,y,w,h] → [x1,y1,x2,y2]
-      t_x1, t_y1 = tlwh[0], tlwh[1]
-      t_x2, t_y2 = tlwh[0] + tlwh[2], tlwh[1] + tlwh[3]
+    t_area = tlwh[2] * tlwh[3]
+    d_area = det_boxes[:, 2] * det_boxes[:, 3]
+    union  = t_area + d_area - inter + 1e-6
 
-      d_x1 = det_boxes[:, 0]
-      d_y1 = det_boxes[:, 1]
-      d_x2 = det_boxes[:, 0] + det_boxes[:, 2]
-      d_y2 = det_boxes[:, 1] + det_boxes[:, 3]
-
-      # Intersection
-      ix1 = np.maximum(t_x1, d_x1)
-      iy1 = np.maximum(t_y1, d_y1)
-      ix2 = np.minimum(t_x2, d_x2)
-      iy2 = np.minimum(t_y2, d_y2)
-      inter = np.maximum(0.0, ix2 - ix1) * np.maximum(0.0, iy2 - iy1)
-
-      # Union
-      t_area = tlwh[2] * tlwh[3]
-      d_area = det_boxes[:, 2] * det_boxes[:, 3]
-      union  = t_area + d_area - inter + 1e-6
-
-      iou = inter / union
-      best_idx = int(np.argmax(iou))
-
-      return float(det_confs[best_idx]) if iou[best_idx] > 0.0 else 0.0
-
+    iou = inter / union
+    best_idx = int(np.argmax(iou))
+    return float(det_confs[best_idx]) if iou[best_idx] > 0.0 else 0.0
 
 def _image_stats(frame: np.ndarray) -> np.ndarray:
-      """
-      Very cheap, attack‑sensitive statistics.
-      Returns a 4‑dim vector: [mean, std, horiz‑grad, vert‑grad] on a gray‑scale frame.
-      """
-      gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
-      mean   = gray.mean()
-      std    = gray.std()
-      grad_x = np.mean(np.abs(np.diff(gray, axis=1)))   # horizontal gradient
-      grad_y = np.mean(np.abs(np.diff(gray, axis=0)))   # vertical gradient
-      return np.array([mean, std, grad_x, grad_y], dtype=np.float32)
-
+    gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+    return np.array([
+        gray.mean(), gray.std(), 
+        np.mean(np.abs(np.diff(gray, axis=1))), 
+        np.mean(np.abs(np.diff(gray, axis=0)))
+    ], dtype=np.float32)
 
 class TrackingStateExtractor:
+    def __init__(self):
+        self.tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=True)
+        self._prev_conf: dict[int, float] = {}
+        self._prev_cxcy: dict[int, tuple] = {}
 
-      def __init__(self):
-          # prevents n_envs CUDA contexts fighting over same GPU
-          self.tracker = DeepSort(
-              max_age=30,
-              n_init=3,
-              nn_budget=100,
-              max_cosine_distance=0.4,
-              embedder_gpu=True,   
-          )
-          self._prev_conf: dict[int, float] = {}
-          self._prev_cxcy: dict[int, tuple] = {}
+    def reset(self):
+        self.tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=True)
+        self._prev_conf.clear()
+        self._prev_cxcy.clear()
 
-      def reset(self):
-          """Re-instantiate tracker to avoid stale internal state."""
-          self.tracker = DeepSort(
-              max_age=30,
-              n_init=3,
-              nn_budget=100,
-              max_cosine_distance=0.4,
-              embedder_gpu=True,
-          )
-          self._prev_conf.clear()
-          self._prev_cxcy.clear()
+    def update(self, frame_rgb: np.ndarray, detections_xywh: list, confidences: list) -> tuple[np.ndarray, list, list]:
+        sig_confs = [_sigmoid(c) for c in confidences]
+        raw = [[d, sc, "0"] for d, sc in zip(detections_xywh, sig_confs)]
 
-      def update(
-          self,
-          frame_rgb: np.ndarray,          # (H, W, 3) uint8
-          detections_xywh: list,          # list of [x, y, w, h]
-          confidences: list,              # list of raw confidence floats
-      ) -> tuple[np.ndarray, list]:
+        if detections_xywh:
+            det_arr = np.array(detections_xywh, dtype=np.float32)
+            conf_arr = np.array(sig_confs, dtype=np.float32)
+        else:
+            det_arr = np.empty((0, 4), dtype=np.float32)
+            conf_arr = np.empty((0,), dtype=np.float32)
 
-          # ── Pre-process detections once (not inside the track loop) ──
-          sig_confs = [_sigmoid(c) for c in confidences]
-          raw       = [[d, sc, "0"] for d, sc in zip(detections_xywh, sig_confs)]
+        tracks = self.tracker.update_tracks(raw, frame=frame_rgb)
+        
+        conf_vels, spatial_jumps, feat_dists = [], [], []
+        
+        # Threat Routing Mechanism
+        min_conf = 1.0
+        vulnerable_box = None
 
-          # Vectorised arrays for fast IoU lookup
-          if detections_xywh:
-              det_arr   = np.array(detections_xywh, dtype=np.float32)   # (N,4)
-              conf_arr  = np.array(sig_confs,        dtype=np.float32)   # (N,)
-          else:
-              det_arr  = np.empty((0, 4), dtype=np.float32)
-              conf_arr = np.empty((0,),   dtype=np.float32)
+        for t in tracks:
+            if not t.is_confirmed(): continue
+            tid, tlwh = t.track_id, t.to_tlwh()
+            
+            cur_conf = _best_iou_vectorised(tlwh, det_arr, conf_arr)
+            
+            # Identify the most vulnerable track
+            if cur_conf < min_conf:
+                min_conf = cur_conf
+                vulnerable_box = tlwh
 
-          # ── Run DeepSORT ──────────────────────────────────────────────
-          tracks = self.tracker.update_tracks(raw, frame=frame_rgb)
+            if tid in self._prev_conf:
+                conf_vels.append(cur_conf - self._prev_conf[tid])
+            self._prev_conf[tid] = cur_conf
 
-          conf_vels     = []
-          spatial_jumps = []
-          feat_dists    = []
+            obs_cx, obs_cy = float(tlwh[0] + tlwh[2] / 2), float(tlwh[1] + tlwh[3] / 2)
+            if tid in self._prev_cxcy:
+                px, py = self._prev_cxcy[tid]
+                spatial_jumps.append(math.sqrt((obs_cx - px) ** 2 + (obs_cy - py) ** 2))
+            self._prev_cxcy[tid] = (obs_cx, obs_cy)
 
-          for t in tracks:
-              if not t.is_confirmed():
-                  continue
+            if t.features and len(t.features) >= 2:
+                e1, e2 = np.asarray(t.features[-2], dtype=np.float32), np.asarray(t.features[-1], dtype=np.float32)
+                feat_dists.append(float(1.0 - np.dot(e1, e2) / (np.linalg.norm(e1) * np.linalg.norm(e2) + 1e-8)))
 
-              tid  = t.track_id
-              tlwh = t.to_tlwh()
+        # Pack 7-dim Global Stats
+        global_state = np.array([
+            float(np.min(conf_vels)) if conf_vels else 0.0,
+            float(np.max(spatial_jumps)) if spatial_jumps else 0.0,
+            float(np.max(feat_dists)) if feat_dists else 0.0,
+        ], dtype=np.float32)
+        global_state = np.concatenate([global_state, _image_stats(frame_rgb)])
 
-              # ── 1. Confidence velocity (vectorised IoU) ───────────────
-              cur_conf = _best_iou_vectorised(tlwh, det_arr, conf_arr)
-              if tid in self._prev_conf:
-                  conf_vels.append(cur_conf - self._prev_conf[tid])
-              self._prev_conf[tid] = cur_conf
+        # Pack 5-dim Local Attention State (Normalized BBox + Threat Level)
+        H, W = frame_rgb.shape[:2]
+        if vulnerable_box is not None:
+            local_state = np.array([
+                vulnerable_box[0] / W, vulnerable_box[1] / H, 
+                vulnerable_box[2] / W, vulnerable_box[3] / H, 
+                min_conf
+            ], dtype=np.float32)
+            target_out = list(vulnerable_box)
+        else:
+            local_state = np.zeros(5, dtype=np.float32)
+            target_out = None
 
-              # ── 2. Spatial jump ───────────────────────────────────────
-              obs_cx = float(tlwh[0] + tlwh[2] / 2)
-              obs_cy = float(tlwh[1] + tlwh[3] / 2)
-              if tid in self._prev_cxcy:
-                  px, py = self._prev_cxcy[tid]
-                  spatial_jumps.append(
-                      math.sqrt((obs_cx - px) ** 2 + (obs_cy - py) ** 2)
-                  )
-              self._prev_cxcy[tid] = (obs_cx, obs_cy)
-
-              # ── 3. Feature cosine distance ────────────────────────────
-              if t.features and len(t.features) >= 2:
-                  e1 = np.asarray(t.features[-2], dtype=np.float32)
-                  e2 = np.asarray(t.features[-1], dtype=np.float32)
-                  denom = np.linalg.norm(e1) * np.linalg.norm(e2) + 1e-8
-                  feat_dists.append(float(1.0 - np.dot(e1, e2) / denom))
-
-          # Original 3‑dim state from the tracker
-          state = np.array([
-              float(np.min(conf_vels))     if conf_vels     else 0.0,
-              float(np.max(spatial_jumps)) if spatial_jumps else 0.0,
-              float(np.max(feat_dists))    if feat_dists    else 0.0,
-          ], dtype=np.float32)
-
-          # Append cheap image statistics → total observation = 7 dim
-          stats = _image_stats(frame_rgb)
-          state = np.concatenate([state, stats])
-
-          active_ids = [t.track_id for t in tracks if t.is_confirmed()]
-          return state, active_ids
+        final_state = np.concatenate([global_state, local_state])
+        active_ids = [t.track_id for t in tracks if t.is_confirmed()]
+        
+        return final_state, active_ids, target_out
