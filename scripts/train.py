@@ -112,11 +112,11 @@ if __name__ == "__main__":
                     assigned_seq = seq_list[rank % len(seq_list)]
                     env = MOT17Env(
                         seq_path=assigned_seq,
-                        w1=cfg["reward"]["w1"],
-                        w2=cfg["reward"]["w2"],
-                        w3=cfg["reward"]["w3"],
-                        w4=cfg["reward"]["w4"],
-                    )
+                        w_rec=cfg["reward"]["w_rec"],
+                        w_fp=cfg["reward"]["w_fp"],
+                        w_lost=cfg["reward"]["w_lost"],
+                        w_cost=cfg["reward"]["w_cost"],
+                        )
                     # inject the attack probability for this env instance
                     env.set_attack_prob(attack_prob)
                     # make config available to the env for reward w0 lookup
