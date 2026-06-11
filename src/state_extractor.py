@@ -1,30 +1,21 @@
-"""
-Optimised TrackingStateExtractor with Heuristic Attention Routing.
-Calculates global tracking stats and isolates the most vulnerable bounding box.
-"""
+# src/state_extractor.py
 import math
 import cv2
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-def _sigmoid(x: float) -> float:
-    x = max(-10.0, min(10.0, x))
-    return 1.0 / (1.0 + math.exp(-x))
+EMBEDDER_GPU = False 
 
 def _best_iou_vectorised(tlwh: np.ndarray, det_boxes: np.ndarray, det_confs: np.ndarray) -> float:
     if len(det_boxes) == 0:
         return 0.0
     t_x1, t_y1 = tlwh[0], tlwh[1]
     t_x2, t_y2 = tlwh[0] + tlwh[2], tlwh[1] + tlwh[3]
-    d_x1 = det_boxes[:, 0]
-    d_y1 = det_boxes[:, 1]
-    d_x2 = det_boxes[:, 0] + det_boxes[:, 2]
-    d_y2 = det_boxes[:, 1] + det_boxes[:, 3]
+    d_x1, d_y1 = det_boxes[:, 0], det_boxes[:, 1]
+    d_x2, d_y2 = det_boxes[:, 0] + det_boxes[:, 2], det_boxes[:, 1] + det_boxes[:, 3]
 
-    ix1 = np.maximum(t_x1, d_x1)
-    iy1 = np.maximum(t_y1, d_y1)
-    ix2 = np.minimum(t_x2, d_x2)
-    iy2 = np.minimum(t_y2, d_y2)
+    ix1, iy1 = np.maximum(t_x1, d_x1), np.maximum(t_y1, d_y1)
+    ix2, iy2 = np.minimum(t_x2, d_x2), np.minimum(t_y2, d_y2)
     inter = np.maximum(0.0, ix2 - ix1) * np.maximum(0.0, iy2 - iy1)
 
     t_area = tlwh[2] * tlwh[3]
@@ -45,22 +36,22 @@ def _image_stats(frame: np.ndarray) -> np.ndarray:
 
 class TrackingStateExtractor:
     def __init__(self):
-        self.tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=True)
+        self.tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=EMBEDDER_GPU)
         self._prev_conf: dict[int, float] = {}
         self._prev_cxcy: dict[int, tuple] = {}
 
     def reset(self):
-        self.tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=True)
+        self.tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=EMBEDDER_GPU)
         self._prev_conf.clear()
         self._prev_cxcy.clear()
 
-    def update(self, frame_rgb: np.ndarray, detections_xywh: list, confidences: list) -> tuple[np.ndarray, list, list]:
-        sig_confs = [_sigmoid(c) for c in confidences]
-        raw = [[d, sc, "0"] for d, sc in zip(detections_xywh, sig_confs)]
+    def update(self, frame_rgb: np.ndarray, detections_xywh: list, confidences: list) -> tuple[np.ndarray, list, list | None]:
+        # No sigmoid: detector scores are already probabilities in [0,1].
+        raw = [[d, c, "0"] for d, c in zip(detections_xywh, confidences)]
 
         if detections_xywh:
             det_arr = np.array(detections_xywh, dtype=np.float32)
-            conf_arr = np.array(sig_confs, dtype=np.float32)
+            conf_arr = np.array(confidences, dtype=np.float32)
         else:
             det_arr = np.empty((0, 4), dtype=np.float32)
             conf_arr = np.empty((0,), dtype=np.float32)
@@ -68,8 +59,6 @@ class TrackingStateExtractor:
         tracks = self.tracker.update_tracks(raw, frame=frame_rgb)
         
         conf_vels, spatial_jumps, feat_dists = [], [], []
-        
-        # Threat Routing Mechanism
         min_conf = 1.0
         vulnerable_box = None
 
@@ -79,7 +68,6 @@ class TrackingStateExtractor:
             
             cur_conf = _best_iou_vectorised(tlwh, det_arr, conf_arr)
             
-            # Identify the most vulnerable track
             if cur_conf < min_conf:
                 min_conf = cur_conf
                 vulnerable_box = tlwh
@@ -96,9 +84,9 @@ class TrackingStateExtractor:
 
             if t.features and len(t.features) >= 2:
                 e1, e2 = np.asarray(t.features[-2], dtype=np.float32), np.asarray(t.features[-1], dtype=np.float32)
-                feat_dists.append(float(1.0 - np.dot(e1, e2) / (np.linalg.norm(e1) * np.linalg.norm(e2) + 1e-8)))
+                denom = np.linalg.norm(e1) * np.linalg.norm(e2) + 1e-8
+                feat_dists.append(float(1.0 - np.dot(e1, e2) / denom))
 
-        # Pack 7-dim Global Stats
         global_state = np.array([
             float(np.min(conf_vels)) if conf_vels else 0.0,
             float(np.max(spatial_jumps)) if spatial_jumps else 0.0,
@@ -106,7 +94,6 @@ class TrackingStateExtractor:
         ], dtype=np.float32)
         global_state = np.concatenate([global_state, _image_stats(frame_rgb)])
 
-        # Pack 5-dim Local Attention State (Normalized BBox + Threat Level)
         H, W = frame_rgb.shape[:2]
         if vulnerable_box is not None:
             local_state = np.array([
