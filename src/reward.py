@@ -1,124 +1,86 @@
 # src/reward.py
 """
-  TRACE Reward Function — Complete Redesign
-
-  ROOT CAUSE of passive T0 agent:
-    OLD: R_t = w1*survival - w2*id_switches - w3*action_cost
-         w2=5.0 destroyed any positive signal. Every defense attempt costs ~5.0.
-         T0 optimal because it incurs zero penalty.
-
-    OLD BUG: id_switches = len(current_set - prev_id_set)
-         This counts NEW pedestrians entering the frame as "switches".
-         Agent punished for scene events it cannot control.
-
-  NEW STRUCTURE:
-    R_t = w1*survival + w4*defense_bonus - w2*lost_tracks - w3*action_cost
-          + w0 * gating_bonus   <-- NEW
-
-    w1 = 2.0  survival reward        (up from 1.0)
-    w2 = 1.5  lost-track penalty     (down from 5.0, correct definition)
-    w3 = 0.01 action cost            (near-zero — agent must not fear its tools)
-    w4 = 3.0  defense success bonus  (NEW — reward successful non-T0 defense)
-    w0 = 1.0  gating bonus weight    (NEW — encourage correct gating)
-
-    lost_tracks = prev_id_set - current_set   (tracks that DISAPPEARED)
-    NOT:          current_set - prev_id_set   (new tracks = scene events)
-
-    defense_bonus logic:
-      - action != T0 AND survival >= 0.75 AND no lost tracks  →  +w4 (perfect)
-      - action != T0 AND survival >= 0.50                     →  +w4*0.4 (partial)
-      - action != T0 (exploration incentive, even failed)     →  +0.2 (tiny bonus)
-
-    Initialization guard: first 5 frames return neutral reward.
-    Tracker needs 3 frames (n_init=3) to confirm tracks; penalizing
-    this phase trained the agent that "all states are bad from the start".
+ATTACK-AWARE COUNTERFACTUAL REWARD
+Calculates the causal impact of the agent's defense.
 """
 
-import cv2
-import numpy as np
-from src.transformations import ACTION_COST
+def _iou_xywh(a, b):
+    ax1, ay1, ax2, ay2 = a[0], a[1], a[0] + a[2], a[1] + a[3]
+    bx1, by1, bx2, by2 = b[0], b[1], b[0] + b[2], b[1] + b[3]
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
 
+def _match(dets, confs, gt_boxes, iou_thresh=0.5):
+    if not gt_boxes:
+        return 0.0, len(dets)
+    if not dets:
+        return 0.0, 0
 
-def _no_attack_bonus(frame: np.ndarray) -> float:
-      """
-      Very simple heuristic: a clean MOT17 frame has average gray intensity ~0.45‑0.55.
-      The closer the brightness is to 0.5, the higher the bonus.
-      Returns a value in (0,1].
-      """
-      gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
-      brightness = gray.mean()
-      # Gaussian‑shaped bonus centered at 0.5
-      return np.exp(-((brightness - 0.5) ** 2) * 5.0)
+    pairs = []
+    for gi, g in enumerate(gt_boxes):
+        for di, d in enumerate(dets):
+            iou = _iou_xywh(g, d)
+            if iou >= iou_thresh:
+                pairs.append((iou, gi, di))
+    pairs.sort(reverse=True)
+
+    matched_gt, matched_det = set(), set()
+    covered_conf = 0.0
+    for iou, gi, di in pairs:
+        if gi in matched_gt or di in matched_det:
+            continue
+        matched_gt.add(gi)
+        matched_det.add(di)
+        covered_conf += float(confs[di])
+
+    n_fp = len(dets) - len(matched_det)
+    return covered_conf, n_fp
 
 def compute_reward(
-      prev_id_set:  set,
-      current_ids:  list,
-      action:       int,
-      frame:        np.ndarray,          # <-- raw RGB frame (uint8)
-      frame_idx:    int   = 0,
-      w1:           float = 2.0,
-      w2:           float = 1.5,
-      w3:           float = 0.01,
-      w4:           float = 3.0,
-      w0:           float = 1.0,        # <-- gating bonus weight
-  ) -> tuple[float, int]:
-      """
-      Returns: (reward float, lost_track_count int)
+    det_action, conf_action,      
+    det_t0,     conf_t0,          
+    gt_boxes,                     
+    action: int,
+    prev_id_set: set,
+    current_ids: list,
+    frame_idx: int = 0,
+    action_cost_table: dict | None = None,
+    w_rec:  float = 5.0,
+    w_fp:   float = 2.0,
+    w_lost: float = 0.5,
+    w_cost: float = 1.0,
+):
+    if action_cost_table is None:
+        action_cost_table = {0: 0.0, 1: 0.05, 2: 0.03, 3: 0.04}
 
-      Args:
-          prev_id_set  : confirmed track IDs from previous frame
-          current_ids  : confirmed track IDs from current frame
-          action       : integer in {0, 1, 2, 3}
-          frame        : raw H×W×3 uint8 RGB image (used for gating bonus)
-          frame_idx    : current frame index (0‑based) — used for init guard
-          w1           : survival reward weight
-          w2           : lost-track penalty weight
-          w3           : action cost weight (should be near-zero)
-          w4           : defense success bonus weight
-          w0           : gating bonus weight
-      """
-      current_set = set(current_ids)
+    if frame_idx < 5:
+        return 0.0, {"recovery": 0.0, "fp_delta": 0.0, "lost": 0, "phase": "init"}
 
-      # ── Initialization guard ──────────────────────────────────────────
-      if frame_idx < 5:
-          return 0.5, 0
+    cov_a, fp_a = _match(det_action, conf_action, gt_boxes)
+    cov_0, fp_0 = _match(det_t0,     conf_t0,     gt_boxes)
 
-      # ── Survival reward ───────────────────────────────────────────────
-      if prev_id_set:
-          retained  = len(prev_id_set & current_set)
-          survival  = retained / len(prev_id_set)
+    recovery = cov_a - cov_0                 
+    fp_delta = max(0, fp_a - fp_0)           
 
-          # FIXED DEFINITION: count tracks that DISAPPEARED (agent's fault)
-          lost_tracks = len(prev_id_set - current_set)
-      else:
-          survival    = 1.0 if current_set else 0.0
-          lost_tracks = 0
+    current_set = set(current_ids)
+    lost = len(prev_id_set - current_set) if prev_id_set else 0
 
-      # ── Defense bonus ─────────────────────────────────────────────────
-      defense_bonus = 0.0
-      if action != 0:
-          if lost_tracks == 0 and survival >= 0.75:
-              defense_bonus = w4
-          elif survival >= 0.50:
-              defense_bonus = w4 * 0.4
-          else:
-              defense_bonus = 0.2
+    cost = action_cost_table.get(action, 0.0)
 
-      # ── Action cost (near-zero) ───────────────────────────────────────
-      action_cost = ACTION_COST[action] * w3
+    reward = (w_rec * recovery
+              - w_fp  * fp_delta
+              - w_lost * lost
+              - w_cost * cost)
 
-      # ── Gating bonus / penalty ────────────────────────────────────────
-      # Encourage T0 when the frame looks clean; discourage unnecessary transformations.
-      gate = _no_attack_bonus(frame)
-      if action == 0:
-          gating_bonus = w0 * gate               # positive for doing nothing on a clean frame
-      else:
-          gating_bonus = - w0 * 0.5 * gate       # small penalty for transforming a clean frame
-
-      reward = (w1 * survival
-                + defense_bonus
-                - w2 * lost_tracks
-                - action_cost
-                + gating_bonus)
-
-      return float(reward), int(lost_tracks)
+    info = {
+        "recovery": round(recovery, 4),
+        "fp_delta": int(fp_delta),
+        "lost":     int(lost),
+        "cov_a":    round(cov_a, 3),
+        "cov_0":    round(cov_0, 3),
+        "phase":    "active",
+    }
+    return float(reward), info
