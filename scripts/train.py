@@ -64,51 +64,16 @@ if __name__ == "__main__":
         print("[TRAIN] Warning: Running on CPU mode")
 
     # --------------------------------------------------------------
-    # Curriculum settings for attack probability
+    # Helper to build vec_envs given a sequence list
     # --------------------------------------------------------------
-    ATTACK_START = 0.05   # 5 % of frames attacked at the beginning
-    ATTACK_END   = 0.40   # 40 % of frames attacked by the end of training
-    CURRICULUM_STEPS = 10  # how many stages we split the training into
-
-    attack_schedule = np.linspace(ATTACK_START, ATTACK_END, num=CURRICULUM_STEPS)
-    timesteps_per_stage = cfg["ppo"]["total_timesteps"] // CURRICULUM_STEPS
-
-    print(f"[CURRICULUM] Will train for {CURRICULUM_STEPS} stages.")
-    print(f"[CURRICULUM] Attack probability will go from {ATTACK_START:.2f} → {ATTACK_END:.2f}")
-
-    # --------------------------------------------------------------
-    # Helper to build vec_envs given a sequence list and attack probability
-    # --------------------------------------------------------------
-    def make_vec_envs(seq_list, attack_prob: float):
+    def make_vec_envs(seq_list):
         n_envs = min(cfg["device"].get("n_envs", 4), len(seq_list))
-        # Use DummyVecEnv for n_envs == 1 to avoid multiprocessing pickling issues on Windows
+        
         if n_envs == 1:
             def make_env(rank):
                 def _init():
                     import torch
                     torch.set_num_threads(1)
-                    # Assign a sequence from the list (round‑robin across envs)
-                    assigned_seq = seq_list[rank % len(seq_list)]
-                    env = MOT17Env(
-                        seq_path=assigned_seq,
-                        w1=cfg["reward"]["w1"],
-                        w2=cfg["reward"]["w2"],
-                        w3=cfg["reward"]["w3"],
-                        w4=cfg["reward"]["w4"],
-                    )
-                    # inject the attack probability for this env instance
-                    env.set_attack_prob(attack_prob)
-                    # make config available to the env for reward w0 lookup
-                    env._cfg = cfg
-                    return env
-                return _init
-            return DummyVecEnv([make_env(i) for i in range(n_envs)]), n_envs
-        else:
-            def make_parallel_env(rank):
-                def _init():
-                    import torch
-                    torch.set_num_threads(1)
-                    # Assign a sequence from the list (round‑robin across envs)
                     assigned_seq = seq_list[rank % len(seq_list)]
                     env = MOT17Env(
                         seq_path=assigned_seq,
@@ -116,84 +81,87 @@ if __name__ == "__main__":
                         w_fp=cfg["reward"]["w_fp"],
                         w_lost=cfg["reward"]["w_lost"],
                         w_cost=cfg["reward"]["w_cost"],
-                        )
-                    # inject the attack probability for this env instance
-                    env.set_attack_prob(attack_prob)
-                    # make config available to the env for reward w0 lookup
+                    )
                     env._cfg = cfg
-                    return env
+                    from stable_baselines3.common.monitor import Monitor
+                    return Monitor(env) # Added Monitor so you can see ep_rew_mean!
+                return _init
+            return DummyVecEnv([make_env(i) for i in range(n_envs)]), n_envs
+        else:
+            def make_parallel_env(rank):
+                def _init():
+                    import torch
+                    torch.set_num_threads(1)
+                    assigned_seq = seq_list[rank % len(seq_list)]
+                    env = MOT17Env(
+                        seq_path=assigned_seq,
+                        w_rec=cfg["reward"]["w_rec"],
+                        w_fp=cfg["reward"]["w_fp"],
+                        w_lost=cfg["reward"]["w_lost"],
+                        w_cost=cfg["reward"]["w_cost"],
+                    )
+                    env._cfg = cfg
+                    from stable_baselines3.common.monitor import Monitor
+                    return Monitor(env) # Added Monitor so you can see ep_rew_mean!
                 return _init
 
             vec_env = SubprocVecEnv([make_parallel_env(i) for i in range(n_envs)])
             return vec_env, n_envs
 
     # --------------------------------------------------------------
-    # Loop over curriculum stages
+    # Execute PPO Training
     # --------------------------------------------------------------
-    for stage_idx, attack_prob in enumerate(attack_schedule, start=1):
-        print(f"\n=== CURRICULUM STAGE {stage_idx}/{CURRICULUM_STEPS} ===")
-        print(f"[TRAIN] Setting attack_prob = {attack_prob:.2f}")
+    print("\n=== STARTING TRACE PPO TRAINING ===")
+    
+    vec_env, train_n_envs = make_vec_envs(train_sequences)
+    eval_env, _ = make_vec_envs(val_sequences)
 
-        # Training environments (use training sequences, current attack probability)
-        vec_env, train_n_envs = make_vec_envs(train_sequences, attack_prob)
-        # Validation environments (use validation sequences, no attack – clean eval)
-        eval_env, _ = make_vec_envs(val_sequences, 0.0)
+    p = cfg["ppo"]
+    model = PPO(
+        policy="MlpPolicy",
+        env=vec_env,
+        verbose=1,
+        learning_rate=p["learning_rate"],
+        n_steps=p["n_steps"],
+        batch_size=p["batch_size"],
+        n_epochs=p["n_epochs"],
+        gamma=p["gamma"],
+        gae_lambda=p["gae_lambda"],
+        clip_range=p["clip_range"],
+        ent_coef=p["ent_coef"],
+        policy_kwargs=dict(net_arch=[dict(pi=p["net_arch"], vf=p["net_arch"])]),
+        tensorboard_log=cfg["paths"]["tb_logs"],
+        device=DEVICE,
+    )
 
-        p = cfg["ppo"]
-        model = PPO(
-            policy="MlpPolicy",
-            env=vec_env,
+    save_dir = os.path.dirname(cfg["paths"]["model_save"])
+    os.makedirs(save_dir, exist_ok=True)
+
+    callbacks = [
+        CheckpointCallback(
+            save_freq=max(25000 // train_n_envs, 1),
+            save_path=save_dir,
+            name_prefix="trace_ckpt"
+        ),
+        EvalCallback(
+            eval_env,
+            best_model_save_path=save_dir,
+            eval_freq=max(25000 // train_n_envs, 1),
+            n_eval_episodes=2,
+            deterministic=False,
             verbose=1,
-            learning_rate=p["learning_rate"],
-            n_steps=p["n_steps"],
-            batch_size=p["batch_size"],
-            n_epochs=p["n_epochs"],
-            gamma=p["gamma"],
-            gae_lambda=p["gae_lambda"],
-            clip_range=p["clip_range"],
-            ent_coef=p["ent_coef"],
-            policy_kwargs=dict(net_arch=[dict(pi=p["net_arch"], vf=p["net_arch"])]),
-            tensorboard_log=cfg["paths"]["tb_logs"],
-            device=DEVICE,
         )
+    ]
 
-        save_dir = os.path.dirname(cfg["paths"]["model_save"])
-        os.makedirs(save_dir, exist_ok=True)
+    print(f"[TRAIN] Launching {cfg['ppo']['total_timesteps']} timesteps...")
+    model.learn(
+        total_timesteps=cfg["ppo"]["total_timesteps"],
+        callback=callbacks,
+        progress_bar=True,
+    )
 
-        callbacks = [
-            CheckpointCallback(
-                save_freq=max(50000 // train_n_envs, 1),   # avoid zero
-                save_path=save_dir,
-                name_prefix=f"trace_ckpt_stage{stage_idx}"
-            ),
-            EvalCallback(
-                eval_env,
-                best_model_save_path=save_dir,
-                eval_freq=max(25000 // train_n_envs, 1),
-                n_eval_episodes=2,
-                deterministic=False,
-                verbose=1,
-            )
-        ]
-
-        print("[TRAIN] Starting PPO learning loop...")
-        model.learn(
-            total_timesteps=timesteps_per_stage,
-            callback=callbacks,
-            progress_bar=True,
-            reset_num_timesteps=False   # keep accumulating across stages
-        )
-
-        # Optional: save a stage‑specific model for inspection
-        stage_save_path = os.path.join(save_dir, f"ppo_stage{stage_idx}.zip")
-        model.save(stage_save_path)
-        print(f"[TRAIN] Stage model saved → {stage_save_path}")
-
-        vec_env.close()
-        eval_env.close()
-
-    # --------------------------------------------------------------
-    # Final save (the same path as before for compatibility)
-    # --------------------------------------------------------------
     model.save(cfg["paths"]["model_save"])
     print(f"[TRAIN] Final model saved successfully → {cfg['paths']['model_save']}")
+    
+    vec_env.close()
+    eval_env.close()
