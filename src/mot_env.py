@@ -157,7 +157,11 @@ class MOT17Env(gym.Env):
     def _detect(self, frame_rgb: np.ndarray):
         model  = _get_detector()
         tensor = torch.from_numpy(frame_rgb).permute(2, 0, 1).float().div_(255.0).to(DEVICE)
-        preds  = model([tensor])[0]
+        
+        # Force FP16 inference to accelerate Tensor Cores
+        with torch.autocast(device_type=DEVICE.type, dtype=torch.float16):
+            preds  = model([tensor])[0]
+            
         labels, scores, boxes = preds["labels"], preds["scores"], preds["boxes"]
         keep = (labels == self.person_label) & (scores > self.score_thresh)
         boxes  = boxes[keep].cpu().numpy()
