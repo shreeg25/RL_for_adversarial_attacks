@@ -1,20 +1,69 @@
 TRACE — Accuracy Evaluation Summary
 ============================================================
   Policy mode : stochastic (EOT defense)
-  Sequences   : 9
+  Sequences   : 3
 
-COLUMN 1 — Clean | T0 Baseline (Global micro-agg)
-  MOTA        : 18.57%
-  MOTP        : 82.05%
-  IDF1        : 63.91%
-  Precision   : 57.39%
-  Recall      : 72.12%
-  ID_sw       : 0
+COLUMN 1 — Clean | T0 Baseline
+  MOTA        : 16.48%
+  MOTP        : 77.56%
+  IDF1        : 58.38%
+  Precision   : 58.40%
+  Recall      : 58.37%
+  ID_sw       : 163
 
-COLUMN 2 — Clean | MTD-PPO Agent (Global micro-agg)
-  MOTA        : 17.84%
-  MOTP        : 82.02%
-  IDF1        : 63.70%
-  Precision   : 57.06%
-  Recall      : 72.10%
-  ID_sw       : 0
+COLUMN 2 — Clean | MTD-PPO Agent
+  MOTA        : 16.27%
+  MOTP        : 77.59%
+  IDF1        : 58.30%
+  Precision   : 58.28%
+  Recall      : 58.31%
+  ID_sw       : 163
+
+COLUMN 3 — Whitebox Poisoned | T0 Baseline
+  MOTA        : 12.41%
+  MOTP        : 77.13%
+  IDF1        : 56.40%
+  Precision   : 56.36%
+  Recall      : 56.44%
+  ID_sw       : 168
+
+COLUMN 4 — Whitebox Poisoned | MTD-PPO Agent
+  MOTA        : 12.11%
+  MOTP        : 77.15%
+  IDF1        : 56.28%
+  Precision   : 56.19%
+  Recall      : 56.37%
+  ID_sw       : 168
+
+DEFENSE GAIN (Whitebox)
+  MOTA        : -0.30%
+  MOTP        : +0.02%
+  IDF1        : -0.12%
+  Precision   : -0.17%
+  Recall      : -0.07%
+  ID_sw       : +0
+
+COLUMN 3 — Blackbox Poisoned | T0 Baseline
+  MOTA        : 12.53%
+  MOTP        : 77.17%
+  IDF1        : 56.47%
+  Precision   : 56.42%
+  Recall      : 56.52%
+  ID_sw       : 174
+
+COLUMN 4 — Blackbox Poisoned | MTD-PPO Agent
+  MOTA        : 12.62%
+  MOTP        : 77.17%
+  IDF1        : 56.46%
+  Precision   : 56.48%
+  Recall      : 56.44%
+  ID_sw       : 176
+
+DEFENSE GAIN (Blackbox)
+  MOTA        : +0.09%
+  MOTP        : +0.00%
+  IDF1        : -0.01%
+  Precision   : +0.06%
+  Recall      : -0.08%
+  ID_sw       : +2
+
