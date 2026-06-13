@@ -30,13 +30,17 @@ def apply_transformation(frame: np.ndarray, action: int, target_box: list | None
         out[y1:y2, x1:x2] = cv2.warpPerspective(roi, M, (roi_w, roi_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
     elif action == 2:   
-        noise = np.random.normal(0, 20, roi.shape).astype(np.int16)
-        out[y1:y2, x1:x2] = np.clip(roi.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+        # Gaussian Defocus: Melts the adversarial patch gradients but keeps the human shape
+        k_size = max(3, (roi_w // 10) | 1) # Must be odd
+        out[y1:y2, x1:x2] = cv2.GaussianBlur(roi, (k_size, k_size), 0)
 
     elif action == 3:   
-        bh, bw = max(1, roi_h // 4), max(1, roi_w // 4)
-        y0 = np.random.randint(0, roi_h - bh + 1)
-        x0 = np.random.randint(0, roi_w - bw + 1)
-        out[y1 + y0:y1 + y0 + bh, x1 + x0:x1 + x0 + bw] = 128
+        # Grid Dropout: Destroys localized patch coherence without hiding the whole bounding box
+        grid = np.ones(roi.shape[:2], dtype=np.float32)
+        step_y, step_x = max(2, roi_h // 8), max(2, roi_w // 8)
+        grid[::step_y, :] = 0.5  
+        grid[:, ::step_x] = 0.5
+        grid_3d = np.expand_dims(grid, axis=-1)
+        out[y1:y2, x1:x2] = (roi * grid_3d).astype(np.uint8)
         
     return out
