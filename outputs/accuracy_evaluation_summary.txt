@@ -4,66 +4,18 @@ TRACE — Accuracy Evaluation Summary
   Sequences   : 3
 
 COLUMN 1 — Clean | T0 Baseline
-  MOTA        : 17.08%
-  MOTP        : 77.48%
-  IDF1        : 58.65%
-  Precision   : 58.72%
-  Recall      : 58.58%
-  ID_sw       : 168
-
-COLUMN 2 — Clean | MTD-PPO Agent
-  MOTA        : 16.68%
-  MOTP        : 77.48%
-  IDF1        : 58.53%
-  Precision   : 58.49%
-  Recall      : 58.56%
+  MOTA        : 16.37%
+  MOTP        : 77.53%
+  IDF1        : 58.37%
+  Precision   : 58.34%
+  Recall      : 58.40%
   ID_sw       : 169
 
-COLUMN 3 — Whitebox Poisoned | T0 Baseline
-  MOTA        : 13.21%
-  MOTP        : 77.09%
-  IDF1        : 56.73%
-  Precision   : 56.78%
-  Recall      : 56.69%
-  ID_sw       : 170
-
-COLUMN 4 — Whitebox Poisoned | MTD-PPO Agent
-  MOTA        : 13.09%
-  MOTP        : 77.09%
-  IDF1        : 56.70%
-  Precision   : 56.70%
-  Recall      : 56.70%
-  ID_sw       : 168
-
-DEFENSE GAIN (Whitebox)
-  MOTA        : -0.12%
-  MOTP        : +0.00%
-  IDF1        : -0.03%
-  Precision   : -0.08%
-  Recall      : +0.01%
-  ID_sw       : -2
-
-COLUMN 3 — Blackbox Poisoned | T0 Baseline
-  MOTA        : 12.81%
-  MOTP        : 77.08%
-  IDF1        : 56.65%
-  Precision   : 56.54%
-  Recall      : 56.75%
-  ID_sw       : 171
-
-COLUMN 4 — Blackbox Poisoned | MTD-PPO Agent
-  MOTA        : 12.82%
-  MOTP        : 77.08%
-  IDF1        : 56.68%
-  Precision   : 56.54%
-  Recall      : 56.82%
-  ID_sw       : 173
-
-DEFENSE GAIN (Blackbox)
-  MOTA        : +0.01%
-  MOTP        : +0.00%
-  IDF1        : +0.03%
-  Precision   : +0.00%
-  Recall      : +0.07%
-  ID_sw       : +2
+COLUMN 2 — Clean | MTD-PPO Agent
+  MOTA        : 16.18%
+  MOTP        : 77.55%
+  IDF1        : 58.32%
+  Precision   : 58.22%
+  Recall      : 58.41%
+  ID_sw       : 166
 
