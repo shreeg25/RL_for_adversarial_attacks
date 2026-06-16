@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-EMBEDDER_GPU = False 
+EMBEDDER_GPU = True 
 
 def _best_iou_vectorised(tlwh: np.ndarray, det_boxes: np.ndarray, det_confs: np.ndarray) -> float:
     if len(det_boxes) == 0:
