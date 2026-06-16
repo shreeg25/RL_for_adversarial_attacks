@@ -31,9 +31,12 @@ def apply_transformation(frame: np.ndarray, action: int, target_box: list | None
 
     elif action == 2:   
         # Gaussian Defocus: Melts the adversarial patch gradients but keeps the human shape
-        k_size = max(3, (roi_w // 10) | 1) # Must be odd
-        out[y1:y2, x1:x2] = cv2.GaussianBlur(roi, (k_size, k_size), 0)
-
+        k_size = int(max(3, (roi_w // 10) | 1)) # Strictly cast to native Python int
+        
+        # Force the memory block to be contiguous so the C++ backend doesn't crash
+        roi_contiguous = np.ascontiguousarray(roi)
+        out[y1:y2, x1:x2] = cv2.GaussianBlur(roi_contiguous, (k_size, k_size), 0)
+        
     elif action == 3:   
         # Grid Dropout: Destroys localized patch coherence without hiding the whole bounding box
         grid = np.ones(roi.shape[:2], dtype=np.float32)
