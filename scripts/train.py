@@ -20,6 +20,9 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from src.mot_env import MOT17Env
 from src.device import DEVICE
+import random
+import gymnasium as gym
+from stable_baselines3.common.vec_env import VecFrameStack
 
 # --------------------------------------------------------------
 # Load base config
@@ -62,37 +65,45 @@ if __name__ == "__main__":
     else:
         print("[TRAIN] Warning: Running on CPU mode")
 
+    class DomainRandomizationWrapper(gym.Wrapper):
+        def __init__(self, seq_list, env_kwargs):
+            self.seq_list = seq_list
+            self.env_kwargs = env_kwargs
+            # Boot with a random domain
+            env = MOT17Env(seq_path=random.choice(self.seq_list), **self.env_kwargs)
+            super().__init__(env)
+
+        def reset(self, **kwargs):
+            # The 8GB VRAM Hack: Tear down the old domain and load a new one
+            self.env.close()
+            self.env = MOT17Env(seq_path=random.choice(self.seq_list), **self.env_kwargs)
+            return self.env.reset(**kwargs)
+
     def make_vec_envs(seq_list, force_n_envs=None):
-        n_envs = force_n_envs if force_n_envs else min(cfg["device"].get("n_envs", 8), len(seq_list))
+        # Force single environment to protect 8GB VRAM
+        def make_env():
+            def _init():
+                import torch
+                torch.set_num_threads(1)
+                
+                # Wrap the environment in our Domain Randomizer
+                env_kwargs = {
+                    "w_rec": cfg["reward"]["w_rec"], 
+                    "w_fp": cfg["reward"]["w_fp"],
+                    "w_lost": cfg["reward"]["w_lost"], 
+                    "w_cost": cfg["reward"]["w_cost"]
+                }
+                random_env = DomainRandomizationWrapper(seq_list, env_kwargs)
+                
+                from stable_baselines3.common.monitor import Monitor
+                return Monitor(random_env)
+            return _init
         
-        if n_envs <= 1:
-            def make_env(rank):
-                def _init():
-                    import torch
-                    torch.set_num_threads(1)
-                    env = MOT17Env(
-                        seq_path=seq_list[rank % len(seq_list)],
-                        w_rec=cfg["reward"]["w_rec"], w_fp=cfg["reward"]["w_fp"],
-                        w_lost=cfg["reward"]["w_lost"], w_cost=cfg["reward"]["w_cost"],
-                    )
-                    from stable_baselines3.common.monitor import Monitor
-                    return Monitor(env)
-                return _init
-            return DummyVecEnv([make_env(0)]), 1
-        else:
-            def make_parallel_env(rank):
-                def _init():
-                    import torch
-                    torch.set_num_threads(1)
-                    env = MOT17Env(
-                        seq_path=seq_list[rank % len(seq_list)],
-                        w_rec=cfg["reward"]["w_rec"], w_fp=cfg["reward"]["w_fp"],
-                        w_lost=cfg["reward"]["w_lost"], w_cost=cfg["reward"]["w_cost"],
-                    )
-                    from stable_baselines3.common.monitor import Monitor
-                    return Monitor(env)
-                return _init
-            return SubprocVecEnv([make_parallel_env(i) for i in range(n_envs)]), n_envs
+        # Build the dummy vector and immediately wrap it in FrameStack
+        vec_env = DummyVecEnv([make_env()])
+        vec_env = VecFrameStack(vec_env, n_stack=4) # Expands 12D to 48D Memory
+        
+        return vec_env, 1
 
     print("\n=== STARTING TRACE PPO TRAINING ===")
     
