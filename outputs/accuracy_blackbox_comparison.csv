@@ -1,4 +1,0 @@
-sequence,attack_type,clean_baseline_MOTA,clean_baseline_MOTP,clean_baseline_IDF1,clean_baseline_Precision,clean_baseline_Recall,clean_baseline_ID_sw,poisoned_nodefense_MOTA,poisoned_nodefense_MOTP,poisoned_nodefense_IDF1,poisoned_nodefense_Precision,poisoned_nodefense_Recall,poisoned_nodefense_ID_sw,poisoned_mtdppo_MOTA,poisoned_mtdppo_MOTP,poisoned_mtdppo_IDF1,poisoned_mtdppo_Precision,poisoned_mtdppo_Recall,poisoned_mtdppo_ID_sw
-MOT17-04-FRCNN,Blackbox,60.39,88.24,77.71,88.87,69.03,0,26.93,79.91,66.14,61.62,71.37,0,26.93,79.75,66.21,61.58,71.6,0
-MOT17-02-FRCNN,Blackbox,26.17,85.11,66.03,61.15,71.74,0,-82.25,76.47,45.06,32.25,74.74,0,-83.92,76.42,44.85,32.03,74.78,0
-MOT17-09-FRCNN,Blackbox,71.4,87.85,85.6,86.19,85.02,0,-68.01,80.78,52.06,36.42,91.24,0,-72.92,80.71,51.55,35.81,91.99,0
