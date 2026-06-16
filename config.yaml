@@ -1,29 +1,26 @@
-# config.yaml — 12D ATTENTION + COUNTERFACTUAL REWARD
+# config.yaml — PHASE 1: POISON CURRICULUM + DOMAIN RANDOMIZATION
 
 data:
-  seq_path: data/MOT17/train/MOT17-04-FRCNN
+  seq_path: data/MOT17/train/MOT17-04-FRCNN-Whitebox
 
   train_sequences:
-    - data/MOT17/train/MOT17-04-FRCNN
-    - data/MOT17/train/MOT17-02-FRCNN
-    - data/MOT17/train/MOT17-04-FRCNN-Whitebox
     - data/MOT17/train/MOT17-02-FRCNN-Whitebox
-    - data/MOT17/train/MOT17-04-FRCNN-Blackbox
     - data/MOT17/train/MOT17-02-FRCNN-Blackbox
-
-  extra_sequences:
-    - data/MOT17/train/MOT17-09-FRCNN
+    - data/MOT17/train/MOT17-04-FRCNN-Whitebox
+    - data/MOT17/train/MOT17-04-FRCNN-Blackbox
     - data/MOT17/train/MOT17-09-FRCNN-Whitebox
     - data/MOT17/train/MOT17-09-FRCNN-Blackbox
 
+  extra_sequences: []
+
 reward:
   w_rec:  5.0       
-  w_fp:   2.0       
+  w_fp:   5.0       # PENALTY EQUALIZED: Collateral damage is unacceptable
   w_lost: 0.5       
   w_cost: 1.0       
 
 ppo:
-  total_timesteps: 150000 
+  total_timesteps: 100000 
   n_steps: 512
   batch_size: 128
   n_epochs: 10
@@ -32,13 +29,13 @@ ppo:
   gae_lambda: 0.95
   clip_range: 0.2
   ent_coef: 0.05
-  net_arch: [128, 128] # Expanded for 12D state
+  net_arch: [128, 128]
 
 paths:
-  model_save: outputs/mtd_ppo_agent
+  model_save: outputs/mtd_ppo_agent_phase1
   tb_logs: outputs/tb_logs
 
 device:
   use_gpu: true
   gpu_id: 0
-  n_envs: 1
+  n_envs: 1         # MUST STAY 1 FOR 8GB VRAM
