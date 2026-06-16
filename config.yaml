@@ -25,7 +25,7 @@ reward:
 ppo:
   total_timesteps: 150000 
   n_steps: 512
-  batch_size: 256
+  batch_size: 128
   n_epochs: 10
   learning_rate: 0.0003
   gamma: 0.99
@@ -41,4 +41,4 @@ paths:
 device:
   use_gpu: true
   gpu_id: 0
-  n_envs: 8
+  n_envs: 1
