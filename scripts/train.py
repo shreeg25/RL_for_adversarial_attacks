@@ -4,6 +4,7 @@ import os
 import warnings
 import multiprocessing
 import numpy as np
+import gc
 
 # 1. Clear any multi-threading CPU contention locks before loading frameworks
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -69,13 +70,24 @@ if __name__ == "__main__":
         def __init__(self, seq_list, env_kwargs):
             self.seq_list = seq_list
             self.env_kwargs = env_kwargs
-            # Boot with a random domain
             env = MOT17Env(seq_path=random.choice(self.seq_list), **self.env_kwargs)
             super().__init__(env)
 
         def reset(self, **kwargs):
-            # The 8GB VRAM Hack: Tear down the old domain and load a new one
+            # 1. Gracefully close the C++ OpenCV hooks
             self.env.close()
+            
+            # 2. Delete the Python object reference
+            del self.env
+            
+            # 3. Force the Python Garbage Collector to run immediately
+            gc.collect()
+            
+            # 4. Force PyTorch to empty the dead tensors from VRAM
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                
+            # 5. Boot the new random domain into a clean memory state
             self.env = MOT17Env(seq_path=random.choice(self.seq_list), **self.env_kwargs)
             return self.env.reset(**kwargs)
 
@@ -160,7 +172,7 @@ if __name__ == "__main__":
     model.learn(
         total_timesteps=cfg["ppo"]["total_timesteps"],
         callback=callbacks,
-        progress_bar=True,
+        progress_bar=False, # Disable tqdm to save console performance
     )
 
     model.save(cfg["paths"]["model_save"])
