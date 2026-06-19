@@ -129,7 +129,13 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
     try:
         while not done:
             # Predict using the 48D stacked observation
-            action = 0 if agent is None else int(agent.predict(obs, deterministic=deterministic)[0])
+            if agent is None:
+                action = 0
+            else:
+                # predict returns a tuple of (actions_array, states). 
+                actions, _ = agent.predict(obs, deterministic=deterministic)
+                # Extract the actual integer from the first environment's action array
+                action = int(actions[0].item())
             
             # Step the vectorized environment (returns arrays/lists)
             obs, reward, done_arr, info_arr = vec_env.step([action])
