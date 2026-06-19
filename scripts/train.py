@@ -128,21 +128,19 @@ if __name__ == "__main__":
     print(f"[TRAIN] Initializing PPO with {train_n_envs} parallel workers...")
     print(f"[TRAIN] Buffer size per update: {train_n_envs * p['n_steps']} steps.")
 
-    model = PPO(
-        policy="MlpPolicy",
+    print("[TRAIN] Loading Phase 1 weights for Target Discrimination...")
+    
+    # THE OVERRIDE: Inject the Phase 2 config constraints into the Phase 1 brain
+    custom_hyperparams = {
+        "ent_coef": cfg["ppo"]["ent_coef"],
+        "tensorboard_log": cfg["paths"]["tb_logs"]
+    }
+    
+    model = PPO.load(
+        "outputs/mtd_ppo_agent_phase1.zip",
         env=vec_env,
-        verbose=1,
-        learning_rate=p["learning_rate"],
-        n_steps=p["n_steps"],
-        batch_size=p["batch_size"],
-        n_epochs=p["n_epochs"],
-        gamma=p["gamma"],
-        gae_lambda=p["gae_lambda"],
-        clip_range=p["clip_range"],
-        ent_coef=p["ent_coef"],
-        policy_kwargs=dict(net_arch=[dict(pi=p["net_arch"], vf=p["net_arch"])]),
-        tensorboard_log=cfg["paths"]["tb_logs"],
         device=DEVICE,
+        custom_objects=custom_hyperparams
     )
 
     save_dir = os.path.dirname(cfg["paths"]["model_save"])
