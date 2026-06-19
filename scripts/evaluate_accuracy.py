@@ -100,15 +100,25 @@ def _compute_metrics(s_gt, s_tp, s_fp, s_fn, s_id_sw, s_iou_sum, s_matched):
 # ══════════════════════════════════════════════════════════════════════════════
 def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run_label=""):
     from src.mot_env import MOT17Env
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
+    
     cfg = yaml.safe_load(open("config.yaml"))
-    env = MOT17Env(
+    
+    # 1. Initialize the raw base environment
+    raw_env = MOT17Env(
         seq_path, w_rec=cfg["reward"]["w_rec"], w_fp=cfg["reward"]["w_fp"],
         w_lost=cfg["reward"]["w_lost"], w_cost=cfg["reward"]["w_cost"],
     )
 
+    # 2. Wrap it in the Memory Buffer so the agent gets its 48D state
+    vec_env = DummyVecEnv([lambda: raw_env])
+    vec_env = VecFrameStack(vec_env, n_stack=4)
+
     gt = load_ground_truth(seq_path)
-    obs, _ = env.reset()
-    if env._extractor is not None: env._extractor.reset()
+    
+    # Reset the vectorized environment
+    obs = vec_env.reset()
+    if raw_env._extractor is not None: raw_env._extractor.reset()
 
     s_gt = s_tp = s_fp = s_fn = s_id_sw = 0
     s_iou_sum = 0.0; s_matched = 0
@@ -118,16 +128,24 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
 
     try:
         while not done:
+            # Predict using the 48D stacked observation
             action = 0 if agent is None else int(agent.predict(obs, deterministic=deterministic)[0])
-            obs, reward, done, _, info = env.step(action)
+            
+            # Step the vectorized environment (returns arrays/lists)
+            obs, reward, done_arr, info_arr = vec_env.step([action])
+            
+            # Unpack the vectorized outputs
+            done = done_arr[0]
+            info = info_arr[0]
 
+            # Query the raw environment directly for tracking metrics
             gt_boxes = gt.get(frame_no, [])
-            tracks = _get_confirmed_tracks(env)
+            tracks = _get_confirmed_tracks(raw_env)
             pred_boxes = [t.to_tlwh().tolist() for t in tracks]
 
             matched_ious, fp, fn = match_detections(gt_boxes, pred_boxes)
             tp = len(matched_ious)
-            sw = int(info["id_switches"])
+            sw = int(info.get("id_switches", 0))
 
             s_gt += len(gt_boxes); s_tp += tp; s_fp += fp; s_fn += fn; s_id_sw += sw
             s_iou_sum += sum(matched_ious); s_matched += tp
@@ -137,7 +155,7 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
             })
             frame_no += 1
     finally:
-        env.close()
+        vec_env.close()
 
     # Save per-frame CSV
     if output_dir and run_label:
