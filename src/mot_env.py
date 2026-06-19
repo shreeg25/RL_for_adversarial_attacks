@@ -90,14 +90,14 @@ class FramePrefetcher:
 _DETECTOR = None
 
 
-from torchvision.models.detection import FasterRCNN_MobileNet_V3_Large_FPN_Weights
+from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
 
 def _get_detector():
     global _DETECTOR
     if _DETECTOR is None:
-        # Swap ResNet50 for MobileNetV3 (Massive speedup, slight accuracy drop)
-        m = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
-            weights=FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
+        # THE FIX: Restoring the heavyweight backbone required for MOT17 density
+        m = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
         )
         m.eval().to(DEVICE)
         _DETECTOR = m
@@ -112,7 +112,7 @@ class MOT17Env(gym.Env):
     def __init__(self, seq_path: str,
                  w_rec: float = 5.0, w_fp: float = 2.0,
                  w_lost: float = 0.5, w_cost: float = 1.0,
-                 score_thresh: float = 0.5, person_label: int = 1):
+                 score_thresh: float = 0.1, person_label: int = 1):
         super().__init__()
         self.seq_path = seq_path
         self.w_rec, self.w_fp, self.w_lost, self.w_cost = w_rec, w_fp, w_lost, w_cost
