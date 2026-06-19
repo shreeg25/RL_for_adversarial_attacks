@@ -1,17 +1,15 @@
-# config.yaml — PHASE 1: POISON CURRICULUM + DOMAIN RANDOMIZATION
+# config.yaml — PHASE 2: TARGET DISCRIMINATION
 
 data:
-  seq_path: data/MOT17/train/MOT17-04-FRCNN-Whitebox
+  seq_path: data/MOT17/train/MOT17-04-FRCNN
 
   train_sequences:
-    - data/MOT17/train/MOT17-02-FRCNN-Whitebox
-    - data/MOT17/train/MOT17-02-FRCNN-Blackbox
-    - data/MOT17/train/MOT17-04-FRCNN-Whitebox
-    - data/MOT17/train/MOT17-04-FRCNN-Blackbox
-    - data/MOT17/train/MOT17-09-FRCNN-Whitebox
-    - data/MOT17/train/MOT17-09-FRCNN-Blackbox
-
-  extra_sequences: []
+    - data/MOT17/train/MOT17-02-FRCNN           # CLEAN
+    - data/MOT17/train/MOT17-02-FRCNN-Whitebox  # POISONED
+    - data/MOT17/train/MOT17-04-FRCNN           # CLEAN
+    - data/MOT17/train/MOT17-04-FRCNN-Whitebox  # POISONED
+    - data/MOT17/train/MOT17-09-FRCNN           # CLEAN
+    - data/MOT17/train/MOT17-09-FRCNN-Whitebox  # POISONED
 
 reward:
   w_rec:  5.0       
@@ -32,7 +30,7 @@ ppo:
   net_arch: [128, 128]
 
 paths:
-  model_save: outputs/mtd_ppo_agent_phase1
+  model_save: outputs/mtd_ppo_agent_phase2
   tb_logs: outputs/tb_logs
 
 device:
