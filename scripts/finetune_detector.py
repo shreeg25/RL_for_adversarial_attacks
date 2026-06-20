@@ -1,5 +1,10 @@
 # scripts/finetune_detector.py
+import sys
 import os
+
+# THE BRIDGE: Force Python to recognize the root directory
+sys.path.insert(0, os.path.abspath("."))
+
 import torch
 import pandas as pd
 import cv2
