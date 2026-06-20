@@ -10,3 +10,5 @@ outputs/eval_per_frame.csv
 outputs/eval_per_frame_clean.csv
 architecturev3.jpeg
 architecturev3.png
+weights/
+weights/

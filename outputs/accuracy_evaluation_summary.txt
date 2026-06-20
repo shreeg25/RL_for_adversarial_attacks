@@ -1,0 +1,69 @@
+TRACE — Accuracy Evaluation Summary
+============================================================
+  Policy mode : deterministic
+  Sequences   : 3
+
+COLUMN 1 — Clean | T0 Baseline
+  MOTA        : 75.04%
+  MOTP        : 88.18%
+  IDF1        : 88.24%
+  Precision   : 84.11%
+  Recall      : 92.78%
+  ID_sw       : 119
+
+COLUMN 2 — Clean | MTD-PPO Agent
+  MOTA        : 75.00%
+  MOTP        : 88.18%
+  IDF1        : 88.22%
+  Precision   : 84.10%
+  Recall      : 92.77%
+  ID_sw       : 119
+
+COLUMN 3 — Whitebox Poisoned | T0 Baseline
+  MOTA        : 72.42%
+  MOTP        : 87.82%
+  IDF1        : 86.77%
+  Precision   : 83.99%
+  Recall      : 89.73%
+  ID_sw       : 111
+
+COLUMN 4 — Whitebox Poisoned | MTD-PPO Agent
+  MOTA        : 72.47%
+  MOTP        : 87.82%
+  IDF1        : 86.79%
+  Precision   : 84.04%
+  Recall      : 89.73%
+  ID_sw       : 114
+
+DEFENSE GAIN (Whitebox)
+  MOTA        : +0.05%
+  MOTP        : +0.00%
+  IDF1        : +0.02%
+  Precision   : +0.05%
+  Recall      : +0.00%
+  ID_sw       : +3
+
+COLUMN 3 — Blackbox Poisoned | T0 Baseline
+  MOTA        : 73.10%
+  MOTP        : 87.79%
+  IDF1        : 87.13%
+  Precision   : 84.09%
+  Recall      : 90.41%
+  ID_sw       : 107
+
+COLUMN 4 — Blackbox Poisoned | MTD-PPO Agent
+  MOTA        : 73.08%
+  MOTP        : 87.79%
+  IDF1        : 87.13%
+  Precision   : 84.08%
+  Recall      : 90.40%
+  ID_sw       : 106
+
+DEFENSE GAIN (Blackbox)
+  MOTA        : -0.02%
+  MOTP        : +0.00%
+  IDF1        : +0.00%
+  Precision   : -0.01%
+  Recall      : -0.01%
+  ID_sw       : -1
+
