@@ -91,23 +91,30 @@ _DETECTOR = None
 
 
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 import sys
+import torch
 
 def _get_detector():
     global _DETECTOR
     if _DETECTOR is None:
-        # 1. Initialize the raw ResNet50 architecture with NO default weights
+        # 1. Initialize the raw architecture
         m = fasterrcnn_resnet50_fpn(weights=None)
         
-        # 2. Inject the MOT17-specific neural pathways
+        # 2. Amputate the generic 91-class head and replace it with a 2-class head
+        in_features = m.roi_heads.box_predictor.cls_score.in_features
+        m.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2)
+        
+        # 3. Securely load the domain-specific weights
         weight_path = "weights/faster_rcnn_mot17.pth"
         try:
-            state_dict = torch.load(weight_path, map_location=DEVICE)
+            # SECURITY FIX: Enforce weights_only=True
+            state_dict = torch.load(weight_path, map_location=DEVICE, weights_only=True)
             m.load_state_dict(state_dict)
             print(f"[env] Successfully loaded MOT17 domain weights from {weight_path}")
         except FileNotFoundError:
-            print(f"[FATAL] Domain gap fix failed. Could not find {weight_path}.")
-            print("You must acquire MOT17-finetuned weights before continuing.")
+            print(f"\n[FATAL] Domain gap fix failed. Could not find {weight_path}.")
+            print("You must run scripts/finetune_detector.py first to generate this file.\n")
             sys.exit(1)
             
         m.eval().to(DEVICE)
