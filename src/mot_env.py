@@ -112,7 +112,7 @@ class MOT17Env(gym.Env):
     def __init__(self, seq_path: str,
                  w_rec: float = 5.0, w_fp: float = 2.0,
                  w_lost: float = 0.5, w_cost: float = 1.0,
-                 score_thresh: float = 0.1, person_label: int = 1):
+                 score_thresh: float = 0.4, person_label: int = 1):
         super().__init__()
         self.seq_path = seq_path
         self.w_rec, self.w_fp, self.w_lost, self.w_cost = w_rec, w_fp, w_lost, w_cost
