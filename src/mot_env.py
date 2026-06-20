@@ -90,15 +90,26 @@ class FramePrefetcher:
 _DETECTOR = None
 
 
-from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
+import sys
 
 def _get_detector():
     global _DETECTOR
     if _DETECTOR is None:
-        # THE FIX: Restoring the heavyweight backbone required for MOT17 density
-        m = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-            weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
-        )
+        # 1. Initialize the raw ResNet50 architecture with NO default weights
+        m = fasterrcnn_resnet50_fpn(weights=None)
+        
+        # 2. Inject the MOT17-specific neural pathways
+        weight_path = "weights/faster_rcnn_mot17.pth"
+        try:
+            state_dict = torch.load(weight_path, map_location=DEVICE)
+            m.load_state_dict(state_dict)
+            print(f"[env] Successfully loaded MOT17 domain weights from {weight_path}")
+        except FileNotFoundError:
+            print(f"[FATAL] Domain gap fix failed. Could not find {weight_path}.")
+            print("You must acquire MOT17-finetuned weights before continuing.")
+            sys.exit(1)
+            
         m.eval().to(DEVICE)
         _DETECTOR = m
     return _DETECTOR
