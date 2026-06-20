@@ -14,6 +14,7 @@ import torch
 import torchvision
 from torchvision.transforms import functional as TF
 from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from PIL import Image
 
 
@@ -34,10 +35,21 @@ def generate_poisoned_det(poisoned_seq_path: str):
 
     # ── Load model ───────────────────────────────────────────────────
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[*] Loading Faster R-CNN on {device}...")
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-        weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
-    ).to(device).eval()
+    print(f"[*] Loading MOT17-Finetuned Faster R-CNN on {device}...")
+    
+    # 1. Load the raw architecture
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    
+    # 2. Swap to the 2-class head
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2)
+    
+    # 3. Load your forged domain weights securely
+    weight_path = "weights/faster_rcnn_mot17.pth"
+    state_dict = torch.load(weight_path, map_location=device, weights_only=True)
+    model.load_state_dict(state_dict)
+    
+    model.to(device).eval()
 
     det_file = os.path.join(det_dir, "det.txt")
     written  = 0

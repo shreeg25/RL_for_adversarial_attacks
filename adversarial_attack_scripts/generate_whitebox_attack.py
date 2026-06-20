@@ -33,6 +33,7 @@ import numpy as np
 import pandas as pd
 
 from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from src.mot_env import FramePrefetcher
 from adversarial_attack_scripts.target_selector import find_optimal_target
 from adversarial_attack_scripts.physical_renderer import PhysicalRenderer
@@ -231,10 +232,21 @@ def run_whitebox_attack_on_sequence(seq_path: str, cfg: dict):
     tgt_gt = df_gt[df_gt["id"] == tid]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[*] Loading Faster R-CNN on {device}...")
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-        weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
-    ).to(device).eval()
+    print(f"[*] Loading MOT17-Finetuned Faster R-CNN on {device}...")
+    
+    # 1. Load the raw architecture
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    
+    # 2. Swap to the 2-class head
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2)
+    
+    # 3. Load your forged domain weights securely
+    weight_path = "weights/faster_rcnn_mot17.pth"
+    state_dict = torch.load(weight_path, map_location=device, weights_only=True)
+    model.load_state_dict(state_dict)
+    
+    model.to(device).eval()
 
     # Copy all clean frames first
     clean_img_dir = os.path.join(seq_path, "img1")
