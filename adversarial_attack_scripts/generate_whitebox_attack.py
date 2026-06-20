@@ -85,10 +85,10 @@ class BPDADefenseWrapper(torch.nn.Module):
     Backward: uses identity gradient (straight-through estimator).
     This lets the attacker compute gradients *through* the TRACE defense.
     """
-    def forward(self, x: torch.Tensor, action: int) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, action: int, target_box: list) -> torch.Tensor:
         # Forward pass: true transformation (numpy round-trip)
         np_frame = (x[0].permute(1, 2, 0).detach().cpu().numpy() * 255).astype(np.uint8)
-        transformed = apply_transformation(np_frame, action)
+        transformed = apply_transformation(np_frame, action, target_box)
         out = torch.from_numpy(transformed).float() / 255.0
         out = out.permute(2, 0, 1).unsqueeze(0).to(x.device)
 
@@ -155,7 +155,8 @@ def optimize_patch_whitebox(
                 poisoned[:, :, y1:y2, x1:x2] = injected_region
 
                 # ── BPDA: pass through defense with straight-through grad ──
-                defended = bpda(poisoned, action)
+                # Pass the exact pedestrian coordinates so the defense knows where to trigger
+                defended = bpda(poisoned, action, [x1, y1, x2, y2])
 
                 # ── Detector ───────────────────────────────────────
                 preds   = model([defended[0]])[0]
