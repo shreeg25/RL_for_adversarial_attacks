@@ -20,50 +20,50 @@ COLUMN 2 — Clean | MTD-PPO Agent
   ID_sw       : 119
 
 COLUMN 3 — Whitebox Poisoned | T0 Baseline
-  MOTA        : 72.42%
-  MOTP        : 87.82%
-  IDF1        : 86.77%
-  Precision   : 83.99%
-  Recall      : 89.73%
-  ID_sw       : 111
+  MOTA        : 72.11%
+  MOTP        : 87.84%
+  IDF1        : 86.60%
+  Precision   : 83.95%
+  Recall      : 89.42%
+  ID_sw       : 112
 
 COLUMN 4 — Whitebox Poisoned | MTD-PPO Agent
-  MOTA        : 72.47%
-  MOTP        : 87.82%
-  IDF1        : 86.79%
-  Precision   : 84.04%
-  Recall      : 89.73%
-  ID_sw       : 114
+  MOTA        : 72.14%
+  MOTP        : 87.84%
+  IDF1        : 86.61%
+  Precision   : 83.97%
+  Recall      : 89.42%
+  ID_sw       : 112
 
 DEFENSE GAIN (Whitebox)
-  MOTA        : +0.05%
+  MOTA        : +0.03%
   MOTP        : +0.00%
-  IDF1        : +0.02%
-  Precision   : +0.05%
+  IDF1        : +0.01%
+  Precision   : +0.02%
   Recall      : +0.00%
-  ID_sw       : +3
+  ID_sw       : +0
 
 COLUMN 3 — Blackbox Poisoned | T0 Baseline
-  MOTA        : 73.10%
-  MOTP        : 87.79%
-  IDF1        : 87.13%
-  Precision   : 84.09%
-  Recall      : 90.41%
-  ID_sw       : 107
+  MOTA        : 73.26%
+  MOTP        : 87.83%
+  IDF1        : 87.21%
+  Precision   : 84.20%
+  Recall      : 90.44%
+  ID_sw       : 111
 
 COLUMN 4 — Blackbox Poisoned | MTD-PPO Agent
-  MOTA        : 73.08%
-  MOTP        : 87.79%
-  IDF1        : 87.13%
-  Precision   : 84.08%
-  Recall      : 90.40%
-  ID_sw       : 106
+  MOTA        : 73.24%
+  MOTP        : 87.84%
+  IDF1        : 87.20%
+  Precision   : 84.19%
+  Recall      : 90.42%
+  ID_sw       : 110
 
 DEFENSE GAIN (Blackbox)
   MOTA        : -0.02%
-  MOTP        : +0.00%
-  IDF1        : +0.00%
+  MOTP        : +0.01%
+  IDF1        : -0.01%
   Precision   : -0.01%
-  Recall      : -0.01%
+  Recall      : -0.02%
   ID_sw       : -1
 
