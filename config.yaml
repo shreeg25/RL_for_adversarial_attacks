@@ -4,16 +4,13 @@ data:
   seq_path: data/MOT17/train/MOT17-04-FRCNN
 
   train_sequences:
-    - data/MOT17/train/MOT17-02-FRCNN           # CLEAN
     - data/MOT17/train/MOT17-02-FRCNN-Whitebox  # POISONED
-    - data/MOT17/train/MOT17-04-FRCNN           # CLEAN
     - data/MOT17/train/MOT17-04-FRCNN-Whitebox  # POISONED
-    - data/MOT17/train/MOT17-09-FRCNN           # CLEAN
     - data/MOT17/train/MOT17-09-FRCNN-Whitebox  # POISONED
 
 reward:
   w_rec:  5.0       
-  w_fp:   5.0       # PENALTY EQUALIZED: Collateral damage is unacceptable
+  w_fp:   5.0       
   w_lost: 0.5       
   w_cost: 1.0       
 
@@ -26,11 +23,12 @@ ppo:
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
-  ent_coef: 0.001
+  ent_coef: 0.08  # <--- CRANKED UP FOR EXPLORATION
   net_arch: [128, 128]
 
 paths:
-  model_save: outputs/mtd_ppo_agent_phase2
+  model_load: outputs/mtd_ppo_agent_phase2  # The brain we are starting with
+  model_save: outputs/mtd_ppo_agent_phase3  # The new brain we are forging
   tb_logs: outputs/tb_logs
 
 device:
