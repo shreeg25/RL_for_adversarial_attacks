@@ -24,6 +24,32 @@ from src.device import DEVICE
 import random
 import gymnasium as gym
 from stable_baselines3.common.vec_env import VecFrameStack
+from stable_baselines3.common.callbacks import BaseCallback
+
+class EntropyScheduleCallback(BaseCallback):
+    """
+    Custom callback to linearly decay the entropy coefficient during training.
+    Forces early exploration and late-stage convergence.
+    """
+    def __init__(self, initial_ent_coef: float, final_ent_coef: float, verbose=0):
+        super(EntropyScheduleCallback, self).__init__(verbose)
+        self.initial_ent_coef = initial_ent_coef
+        self.final_ent_coef = final_ent_coef
+
+    def _on_step(self) -> bool:
+        # Calculate the fraction of training remaining (0.0 to 1.0)
+        progress = self.num_timesteps / self.model._total_timesteps
+        
+        # Calculate linear decay
+        current_ent = self.initial_ent_coef - progress * (self.initial_ent_coef - self.final_ent_coef)
+        current_ent = max(self.final_ent_coef, current_ent)
+        
+        # Inject the new entropy coefficient directly into the PPO algorithm
+        self.model.ent_coef = current_ent
+        
+        # Log it to TensorBoard so we can mathematically prove it worked
+        self.logger.record("config/entropy_coef", current_ent)
+        return True
 
 # --------------------------------------------------------------
 # Load base config
@@ -132,7 +158,7 @@ if __name__ == "__main__":
     
     # THE OVERRIDE: Inject the Phase 2 config constraints into the Phase 1 brain
     custom_hyperparams = {
-        "ent_coef": cfg["ppo"]["ent_coef"],
+        "ent_coef": cfg["ppo"]["initial_ent_coef"],
         "tensorboard_log": cfg["paths"]["tb_logs"]
     }
     
@@ -170,15 +196,26 @@ if __name__ == "__main__":
         )
     ]
 
-    print(f"[TRAIN] Launching {cfg['ppo']['total_timesteps']} timesteps...")
-    model.learn(
-        total_timesteps=cfg["ppo"]["total_timesteps"],
-        callback=callbacks,
-        progress_bar=False, # Disable tqdm to save console performance
+    # 1. Initialize the custom Entropy Scheduler
+    entropy_callback = EntropyScheduleCallback(
+        initial_ent_coef=cfg["ppo"]["initial_ent_coef"],
+        final_ent_coef=cfg["ppo"]["final_ent_coef"]
     )
 
-    model.save(cfg["paths"]["model_save"])
-    print(f"[TRAIN] Final model saved successfully → {cfg['paths']['model_save']}")
-    
+    print(f"[*] Starting Phase 3 Training on Poisoned Sequences...")
+    print(f"[*] Entropy Schedule: {cfg['ppo']['initial_ent_coef']} -> {cfg['ppo']['final_ent_coef']}")
+
+    # 2. Inject the callback into the learning loop
+    model.learn(
+        total_timesteps=cfg["ppo"]["total_timesteps"],
+        callback=entropy_callback,  # <--- INJECTED HERE
+        reset_num_timesteps=False   # Keep this False so it continues from Phase 2
+    )
+
+    # 3. Save the hardened brain
+    save_path = cfg["paths"]["model_save"] + ".zip"
+    model.save(save_path)
+    print(f"[*] Training Complete. Hardened agent saved to {save_path}")
+
     vec_env.close()
     eval_env.close()
