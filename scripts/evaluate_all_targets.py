@@ -60,7 +60,6 @@ def evaluate_target(gt_path, track_path, target_id):
 
     # Handle varying output types from DeepSORT (.csv or .txt)
     try:
-        # Check if it has a header row (like standard pandas csv) or MOTChallenge format
         first_line = open(track_path, 'r').readline()
         if "frame" in first_line.lower():
             track_df = pd.read_csv(track_path)
@@ -70,9 +69,14 @@ def evaluate_target(gt_path, track_path, target_id):
     except Exception:
         return None
 
-    # Map column names if they differ slightly
+    # Map column names dynamically to handle CSV inconsistencies
     track_df.columns = [c.lower().strip() for c in track_df.columns]
-    id_col = "track_id" if "track_id" in track_df.columns else ("id" if "id" in track_df.columns else track_df.columns[1])
+    
+    id_col = next((c for c in ["track_id", "id", "target_id", "object_id"] if c in track_df.columns), track_df.columns[1])
+    x_col = next((c for c in ["x", "x1", "bb_left", "bbox_x", "left"] if c in track_df.columns), track_df.columns[2])
+    y_col = next((c for c in ["y", "y1", "bb_top", "bbox_y", "top"] if c in track_df.columns), track_df.columns[3])
+    w_col = next((c for c in ["w", "width", "bbox_w"] if c in track_df.columns), track_df.columns[4])
+    h_col = next((c for c in ["h", "height", "bbox_h"] if c in track_df.columns), track_df.columns[5])
     
     cols = ["frame", "id", "x", "y", "w", "h", "conf", "class", "vis"]
     gt_df = pd.read_csv(gt_path, header=None, names=cols)
@@ -92,7 +96,7 @@ def evaluate_target(gt_path, track_path, target_id):
             
         best_iou, best_track_id = 0, -1
         for _, trk_row in frame_tracks.iterrows():
-            trk_box = [trk_row["x"], trk_row["y"], trk_row["w"], trk_row["h"]]
+            trk_box = [trk_row[x_col], trk_row[y_col], trk_row[w_col], trk_row[h_col]]
             iou = bb_iou(gt_box, trk_box)
             if iou > best_iou:
                 best_iou, best_track_id = iou, trk_row[id_col]
