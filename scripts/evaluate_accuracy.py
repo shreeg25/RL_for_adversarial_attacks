@@ -172,12 +172,12 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
         os.makedirs(output_dir, exist_ok=True)
         df = pd.DataFrame(frame_stats)
         df.to_csv(os.path.join(output_dir, f"{run_label}_per_frame.csv"), index=False)
-        
+
         track_file = os.path.join(output_dir, f"{run_label}_tracks.txt")
-        if len(raw_tracks) > 0:
-            np.savetxt(track_file, np.array(raw_tracks), fmt='%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d')
-        else:
-            open(track_file, 'w').close() # Create empty file if no tracks
+        with open(track_file, 'w') as f:
+            for row in raw_tracks:
+                # Explicitly cast to prevent tracker dtype anomalies
+                f.write(f"{int(row[0])},{int(row[1])},{float(row[2]):.2f},{float(row[3]):.2f},{float(row[4]):.2f},{float(row[5]):.2f},{float(row[6]):.2f},-1,-1,-1\n")
 
     return _compute_metrics(s_gt, s_tp, s_fp, s_fn, s_id_sw, s_iou_sum, s_matched)
 
