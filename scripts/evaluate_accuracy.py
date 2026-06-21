@@ -125,7 +125,7 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
     frame_no = 1; done = False
     
     frame_stats = []
-
+    raw_tracks = []
     try:
         while not done:
             # Predict using the 48D stacked observation
@@ -148,6 +148,10 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
             gt_boxes = gt.get(frame_no, [])
             tracks = _get_confirmed_tracks(raw_env)
             pred_boxes = [t.to_tlwh().tolist() for t in tracks]
+            for t in tracks:
+                bbox = t.to_tlwh() # [x, y, w, h]
+                # MOT Format: frame, id, x, y, w, h, conf, -1, -1, -1
+                raw_tracks.append([frame_no, t.track_id, bbox[0], bbox[1], bbox[2], bbox[3], 1.0, -1, -1, -1])
 
             matched_ious, fp, fn = match_detections(gt_boxes, pred_boxes)
             tp = len(matched_ious)
@@ -168,6 +172,12 @@ def run_sequence(seq_path, agent=None, deterministic=False, output_dir=None, run
         os.makedirs(output_dir, exist_ok=True)
         df = pd.DataFrame(frame_stats)
         df.to_csv(os.path.join(output_dir, f"{run_label}_per_frame.csv"), index=False)
+        
+        track_file = os.path.join(output_dir, f"{run_label}_tracks.txt")
+        if len(raw_tracks) > 0:
+            np.savetxt(track_file, np.array(raw_tracks), fmt='%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%d')
+        else:
+            open(track_file, 'w').close() # Create empty file if no tracks
 
     return _compute_metrics(s_gt, s_tp, s_fp, s_fn, s_id_sw, s_iou_sum, s_matched)
 

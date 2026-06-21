@@ -118,7 +118,7 @@ def find_track_file(base_seq, prefix, attack_type=None):
         return None
 
     for f in os.listdir(OUTPUTS_DIR):
-        if f.startswith(prefix) and base_seq in f:
+        if f.startswith(prefix) and base_seq in f and f.endswith(".txt"):
             if attack_type:
                 # Cols 3 and 4 should contain the attack type
                 if attack_type in f: return os.path.join(OUTPUTS_DIR, f)
