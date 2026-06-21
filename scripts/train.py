@@ -136,8 +136,12 @@ if __name__ == "__main__":
         "tensorboard_log": cfg["paths"]["tb_logs"]
     }
     
+    # Dynamically load the previous phase from config
+    load_path = cfg["paths"]["model_load"] + ".zip"
+    print(f"[*] Loading agent weights from: {load_path}")
+
     model = PPO.load(
-        "outputs/mtd_ppo_agent_phase1.zip",
+        load_path,
         env=vec_env,
         device=DEVICE,
         custom_objects=custom_hyperparams
