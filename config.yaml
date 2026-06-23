@@ -12,7 +12,7 @@ reward:
   w_rec:  5.0       
   w_fp:   5.0       
   w_lost: 0.5       
-  w_cost: 1.0       
+  w_cost: 0.0       
 
 ppo:
   total_timesteps: 100000 
@@ -28,11 +28,11 @@ ppo:
   net_arch: [128, 128]
 
 paths:
-  model_load: outputs/mtd_ppo_agent_phase2  # The brain we are starting with
-  model_save: outputs/mtd_ppo_agent_phase3  # The new brain we are forging
+  model_load: outputs/mtd_ppo_agent_phase3  # The brain we are starting with
+  model_save: outputs/mtd_ppo_agent_phase4  # The new brain we are forging
   tb_logs: outputs/tb_logs
 
 device:
   use_gpu: true
   gpu_id: 0
-  n_envs: 1         # MUST STAY 1 FOR 8GB VRAM
+  n_envs: 1         # MUST STAY 1 FOR 8GB VRAM                                        
